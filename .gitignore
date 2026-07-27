@@ -1,0 +1,11 @@
+# Data and generated output are never committed — both are reproducible from the ingest job.
+# Test fixtures are inline in the test modules, so nothing here needs un-ignoring.
+data/
+out/
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/

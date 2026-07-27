@@ -1,0 +1,150 @@
+# Every threshold, window and weight in the scanner lives in this file.
+#
+# There are NO defaults in the Python config model. A missing key is an error, and an
+# unknown key is an error. This is deliberate: a default in code is a numeric literal in
+# code, which spec §9 forbids. If you want to change the scanner's behaviour, change it
+# here.
+#
+# Provenance tags follow the spec:
+#   [DOC] — stated in the Laws of Swing doc or Qullamaggie's FAQ. Authoritative.
+#   [EXT] — implementer's extrapolation. Unvalidated. May contribute to RANKING ONLY;
+#           never to a hard gate. This is enforced structurally, not by convention —
+#           see src/qms/features/consolidation.py.
+
+data:
+  # [DOC-adjacent] Spec §2 requires this be an explicit, documented decision.
+  # Yahoo's chart OHLCV is already split-adjusted and NOT dividend-adjusted, which is
+  # exactly what we want: momentum and ADR need split continuity, but dividend
+  # adjustment shifts absolute price levels and would corrupt both the min_price gate
+  # and the stop/entry arithmetic in sizing. See docs/DATA.md.
+  adjustment_policy: split_only
+  backfill_years: 2
+  # Nightly we refetch a window rather than a single bar, so a missed night self-heals
+  # and late vendor restatements propagate.
+  nightly_lookback_days: 30
+
+features:
+  adr:
+    # [DOC] Mean of the high/low RATIOS, not the ratio of the means. Spec §3.1.
+    periods: [14, 20]
+    primary: 20
+  atr:
+    # [DOC] Wilder smoothing, includes gaps. Spec §3.2.
+    period: 14
+  momentum:
+    # [DOC] Trading-day lookbacks from the doc's TC2000 formulas. Spec §3.3.
+    gain_1m: 21
+    gain_3m: 63
+    gain_6m: 126
+  sma:
+    # [DOC] 10/20/50 are load-bearing; 200 is optional context. Spec §3.4.
+    periods: [10, 20, 50, 200]
+  liquidity:
+    avg_vol_window: 20
+    avg_dollar_vol_window: 20
+  consolidation:
+    # [EXT] ALL of this. Spec §3.7 — the source material specifies none of it.
+    # A high-tight flag and a multi-month base are different animals, so three buckets.
+    buckets: [5, 15, 40]
+    atr_fast: 10
+    atr_slow: 50
+    vol_fast: 5
+    vol_slow: 50
+
+scan_a:
+  gates:
+    # All [DOC]. Spec §4.1.
+    min_price: 5.0
+    min_dollar_vol: 20000000.0
+    min_adr: 5.0
+    # Top 10% => 0.90. Cross-sectional, recomputed every scan date, because a fixed
+    # "+50%" bar yields 400 candidates in a bull market and zero in a chop.
+    momentum_pctile: 0.90
+    above_50: true
+    earnings_blackout_days: 3
+  ma_stack:
+    # [DOC] The doc calls 10>20 a general guideline and says brief undercuts are fine.
+    # So: "fast > slow on at least k of the last m sessions", NOT a same-day boolean.
+    # A strict same-day test drops exactly the pullback setups this scan exists to find.
+    fast: 10
+    slow: 20
+    k: 8
+    m: 10
+  triggers:
+    # AT_*MA is [DOC] (he takes entries at the 10/20/50).
+    near_ma_adr: 1.0
+    # AT_PIVOT is a reasonable reading of breakout entry, but the 3.0 is [EXT].
+    near_pivot_pct: 3.0
+    pivot_buckets: [5, 15, 40]
+    ma_periods: [10, 20, 50]
+  ranking:
+    # Spec §4.3: momentum percentile dominant, [EXT] consolidation metrics at low
+    # weight. DO NOT tune these before reading several hundred output charts — there is
+    # no way to evaluate them yet.
+    weights:
+      momentum_pctile: 1.0
+      trigger_bonus: 0.25
+      tightness_adr: -0.10
+      contraction: -0.10
+      vol_dryup: -0.10
+      low_slope: 0.05
+      depth_from_high: -0.05
+    # Which consolidation bucket feeds the ranking score.
+    score_bucket: 15
+    # Score assigned to an [EXT] component a candidate has no value for (typically a
+    # recent listing whose long consolidation windows have not filled). 0.5 is the
+    # median percentile, i.e. neither rewarded nor punished for missing data.
+    neutral_percentile: 0.5
+    max_candidates: 60
+
+sizing:
+  # All [DOC]. Spec §5.
+  account: 100000.0
+  # FAQ: 0.3-0.5% typical, rarely above 1%.
+  risk_pct: 0.005
+  # Doc's share-calculator formula: stop = low_of_day * 0.995
+  stop_buffer: 0.995
+  # Never more than 1% of average volume.
+  max_pct_of_avg_vol: 0.01
+  # Minimum dollar volume = position_size * 200.
+  dollar_vol_multiple: 200.0
+  # Never more than 20% of account in one name.
+  max_account_concentration: 0.20
+  # Preferred entry is 1/2 to 2/3 of ATR above the low; max entry is low + ATR.
+  preferred_entry_atr_low: 0.5
+  preferred_entry_atr_high: 0.67
+  max_entry_atr_multiple: 1.0
+
+quality:
+  # The gate that stops the scanner running quietly on bad data. Two of the four feeds
+  # are unofficial endpoints with no contract, and a whole missing session has already
+  # been observed in the wild (docs/DATA.md), so these checks are not theoretical.
+  #
+  # Staleness is measured in sessions between the newest stored bar and the session the
+  # watchlist is for. 0 means "the newest bar must be the last completed session".
+  max_staleness_sessions: 0
+  # Fraction of the universe that must have a bar on a session for that session to count
+  # as the reference date. The vendor's trailing edge is ragged — observed 2026-07-24,
+  # where 42 of 11,574 symbols had a bar for a session missing for everyone else — so the
+  # scan pins to the newest session clearing this bar rather than to max(date).
+  min_universe_coverage: 0.80
+  # A symbol whose most recent bar is more than this many sessions behind the reference
+  # is dropped from the cross-section. Halted and barely-traded names otherwise sit there
+  # with months-old prices and can pass every gate.
+  max_bar_age_sessions: 3
+  # Minimum symbols in the bar store before a scan is meaningful at all.
+  min_symbols: 500
+  # A single-session move beyond this is treated as suspicious unless a split explains it.
+  jump_threshold_pct: 40.0
+  # How many recent sessions to scan for unexplained jumps.
+  jump_lookback_sessions: 5
+  # Tolerated share of symbols with an unexplained jump before it becomes an error;
+  # genuine biotech binaries and small-cap squeezes do move this much.
+  max_unexplained_jump_share: 0.02
+
+report:
+  chart_months: 6
+  chart_sma: [10, 20, 50]
+  chart_width_px: 1100
+  chart_height_px: 620
+  chart_dpi: 100

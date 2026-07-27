@@ -1,0 +1,51 @@
+# Universe construction from the NASDAQ Trader symbol directory.
+#
+# Source files (official, free, no key):
+#   https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt
+#   https://www.nasdaqtrader.com/dynamic/symdir/otherlisted.txt
+#
+# As probed 2026-07-27: 13,029 non-test symbols, of which 5,559 are ETFs.
+
+exchanges:
+  # otherlisted.txt "Exchange" codes; nasdaqlisted.txt rows are all treated as "Q".
+  # Observed counts on 2026-07-27: N=2920, P=2692, Z=1550, A=308, Q=5567.
+  Q: true # Nasdaq
+  N: true # NYSE
+  A: true # NYSE American
+  P: true # NYSE Arca (mostly ETFs)
+  Z: true # Cboe BZX (mostly ETFs)
+  V: false # IEX
+  U: false # OTC / other
+
+include_etfs: true
+exclude_test_issues: true
+
+# Nasdaq "Financial Status" != N means deficient / delinquent / bankrupt. These are left
+# IN by default: the liquidity and momentum gates already remove almost all of them, and
+# the flag is Nasdaq-only so excluding it would apply an asymmetric rule across venues.
+exclude_deficient: false
+
+# Symbols carrying these suffixes after the separator are warrants, units, preferreds and
+# rights — not the common stock the strategy trades.
+exclude_suffixes: ["W", "U", "R", "P", "Q"]
+
+# Securities whose name matches any of these (case-insensitive) are dropped. Aimed at
+# leveraged/inverse ETPs, which pass ADR and momentum gates trivially and are not what
+# this strategy is looking for.
+exclude_name_patterns:
+  - "\\b\\d+X\\b"
+  - "\\bLeveraged\\b"
+  - "\\bInverse\\b"
+  - "\\bUltraShort\\b"
+  - "\\bUltraPro\\b"
+  - "\\bBear\\b"
+  - "-1X"
+  - "\\bETN\\b"
+
+# Hand-maintained escape hatch. Anything here is dropped unconditionally.
+exclude_symbols: []
+
+# Names below this 20d average dollar volume are not refetched nightly. Deliberately an
+# order of magnitude below scan_a.gates.min_dollar_vol so a name can grow into
+# eligibility between weekly full refreshes.
+active_universe_floor_dollar_vol: 2000000.0

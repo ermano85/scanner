@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scan A — {{ as_of }}</title>
+<style>
+  :root {
+    --bg: #f8fafc; --card: #ffffff; --ink: #0f172a; --muted: #64748b;
+    --line: #e2e8f0; --accent: #1d4ed8; --warn-bg: #fef3c7; --warn-ink: #92400e;
+    --warn-line: #fcd34d; --bad: #b91c1c; --good: #15803d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--ink);
+         font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { max-width: 1180px; margin: 0 auto 20px; }
+  h1 { margin: 0 0 4px; font-size: 21px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .banner { max-width: 1180px; margin: 0 auto 18px; padding: 11px 14px; border-radius: 8px;
+            background: var(--warn-bg); color: var(--warn-ink);
+            border: 1px solid var(--warn-line); font-size: 13px; }
+  .banner strong { display: block; margin-bottom: 2px; }
+  .funnel { max-width: 1180px; margin: 0 auto 18px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill { background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+          padding: 4px 12px; font-size: 12px; color: var(--muted); }
+  .pill b { color: var(--ink); }
+  .card { max-width: 1180px; margin: 0 auto 18px; background: var(--card);
+          border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px;
+          padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .rank { font-weight: 700; color: var(--muted); font-size: 13px; min-width: 28px; }
+  .sym { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+  .tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+         background: #eff6ff; color: var(--accent); border: 1px solid #bfdbfe; }
+  .tag.none { background: #f1f5f9; color: var(--muted); border-color: var(--line); }
+  .tag.risk { background: #fef2f2; color: var(--bad); border-color: #fecaca; }
+  .spacer { flex: 1; }
+  .score { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+  .body { display: grid; grid-template-columns: minmax(0, 1fr) 320px; }
+  @media (max-width: 900px) { .body { grid-template-columns: 1fr; } }
+  .chart { padding: 10px; min-width: 0; }
+  .chart img { width: 100%; height: auto; display: block; }
+  .stats { border-left: 1px solid var(--line); padding: 12px 16px; font-size: 13px; }
+  @media (max-width: 900px) { .stats { border-left: none; border-top: 1px solid var(--line); } }
+  .stats h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase;
+              letter-spacing: 0.05em; color: var(--muted); }
+  .stats h3:not(:first-child) { margin-top: 14px; }
+  .kv { display: flex; justify-content: space-between; gap: 12px; padding: 1px 0; }
+  .kv span:last-child { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .est { margin-top: 8px; font-size: 11px; color: var(--muted); font-style: italic; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--line);
+           white-space: nowrap; }
+  th { background: #f1f5f9; font-size: 11px; text-transform: uppercase;
+       letter-spacing: 0.04em; color: var(--muted); position: sticky; top: 0; }
+  th:nth-child(-n+3), td:nth-child(-n+3) { text-align: left; }
+  td { font-variant-numeric: tabular-nums; }
+  tbody tr:hover { background: #f8fafc; }
+  .scroll { overflow-x: auto; }
+  .neg { color: var(--bad); } .pos { color: var(--good); }
+  footer { max-width: 1180px; margin: 26px auto 0; padding-top: 14px;
+           border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  footer p { margin: 0 0 6px; }
+  code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 11.5px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Scan A — watchlist for {{ as_of }}</h1>
+  <div class="sub">
+    Generated {{ generated_at }} from bars through <strong>{{ data_date }}</strong>.
+    {{ candidates|length }} candidate{{ '' if candidates|length == 1 else 's' }} for manual chart review.
+  </div>
+</header>
+
+{% if stale %}
+<div class="banner">
+  <strong>Data is {{ staleness }} session(s) stale.</strong>
+  The newest bar is {{ data_date }} but the watchlist is for {{ as_of }}. The vendor is
+  missing sessions — see <code>docs/DATA.md</code>. Treat every number below as
+  out of date by that much.
+</div>
+{% endif %}
+
+<div class="banner">
+  <strong>Triage tool, not a trading system.</strong>
+  Nothing here is a buy signal or financial advice. Sizing figures are pre-open estimates
+  computed from the previous session's low and close; recompute them intraday against the
+  real session low before acting.
+</div>
+
+<div class="funnel">
+  <span class="pill">universe <b>{{ universe_size }}</b></span>
+  <span class="pill">after liquidity <b>{{ after_liquidity }}</b></span>
+  <span class="pill">candidates <b>{{ candidates|length }}</b></span>
+  {% for gate, count in rejections.items() %}
+  <span class="pill">−{{ count }} {{ gate }}</span>
+  {% endfor %}
+</div>
+
+{% if candidates %}
+<div class="card">
+  <div class="scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Sym</th><th>Triggers</th>
+        <th>Close</th><th>ADR%</th><th>ATR</th>
+        <th>1m</th><th>3m</th><th>6m</th><th>Mom %ile</th>
+        <th>Δ10 (ADR)</th><th>Δ20 (ADR)</th><th>Δ50 (ADR)</th>
+        <th>Earnings</th><th>Shares</th><th>Bound by</th><th>Stop</th><th>Risk $</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for c in candidates %}
+      <tr>
+        <td>{{ c.rank }}</td>
+        <td><strong>{{ c.symbol }}</strong></td>
+        <td>{{ c.triggers or '—' }}</td>
+        <td>{{ c.close | num(2) }}</td>
+        <td>{{ c.adr_pct | num(1) }}</td>
+        <td>{{ c.atr_14 | num(2) }}</td>
+        <td class="{{ 'pos' if (c.gain_1m or 0) >= 0 else 'neg' }}">{{ c.gain_1m | pct }}</td>
+        <td class="{{ 'pos' if (c.gain_3m or 0) >= 0 else 'neg' }}">{{ c.gain_3m | pct }}</td>
+        <td class="{{ 'pos' if (c.gain_6m or 0) >= 0 else 'neg' }}">{{ c.gain_6m | pct }}</td>
+        <td>{{ c.momentum_pctile | pctile }}</td>
+        <td>{{ c.dist_to_sma_10_adr | num(2) }}</td>
+        <td>{{ c.dist_to_sma_20_adr | num(2) }}</td>
+        <td>{{ c.dist_to_sma_50_adr | num(2) }}</td>
+        <td>{{ c.earnings_label }}</td>
+        <td>{{ c.shares | num(0) }}</td>
+        <td>{{ c.binding_cap }}</td>
+        <td>{{ c.stop_price | num(2) }}</td>
+        <td>{{ c.actual_risk_dollars | num(0) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+{% for c in candidates %}
+<div class="card" id="{{ c.symbol }}">
+  <div class="head">
+    <span class="rank">#{{ c.rank }}</span>
+    <span class="sym">{{ c.symbol }}</span>
+    {% if c.triggers %}
+      {% for tag in c.triggers.split(' ') %}<span class="tag">{{ tag }}</span>{% endfor %}
+    {% else %}
+      <span class="tag none">no trigger</span>
+    {% endif %}
+    {% if c.extended %}<span class="tag risk">EXTENDED</span>{% endif %}
+    {% if c.stop_exceeds_atr %}<span class="tag risk">STOP &gt; ATR</span>{% endif %}
+    {% if c.earnings_unknown %}<span class="tag risk">EARNINGS UNKNOWN</span>{% endif %}
+    <span class="spacer"></span>
+    <span class="score">score {{ c.score | num(3) }}</span>
+  </div>
+  <div class="body">
+    <div class="chart">
+      {% if c.chart_uri %}<img src="{{ c.chart_uri }}" alt="{{ c.symbol }} daily chart">
+      {% else %}<em>chart unavailable</em>{% endif %}
+    </div>
+    <div class="stats">
+      <h3>Character</h3>
+      <div class="kv"><span>Close</span><span>{{ c.close | num(2) }}</span></div>
+      <div class="kv"><span>ADR% (20)</span><span>{{ c.adr_pct | num(2) }}%</span></div>
+      <div class="kv"><span>ATR (14)</span><span>{{ c.atr_14 | num(2) }}</span></div>
+      <div class="kv"><span>Avg $ vol (20)</span><span>{{ c.avg_dollar_vol_20 | money }}</span></div>
+
+      <h3>Momentum</h3>
+      <div class="kv"><span>1m</span><span>{{ c.gain_1m | pct(1) }} ({{ c.gain_1m_pctile | pctile }}p)</span></div>
+      <div class="kv"><span>3m</span><span>{{ c.gain_3m | pct(1) }} ({{ c.gain_3m_pctile | pctile }}p)</span></div>
+      <div class="kv"><span>6m</span><span>{{ c.gain_6m | pct(1) }} ({{ c.gain_6m_pctile | pctile }}p)</span></div>
+
+      <h3>Distance to MA (% / ADR)</h3>
+      <div class="kv"><span>10 SMA</span><span>{{ c.dist_to_sma_10_pct | num(1) }}% / {{ c.dist_to_sma_10_adr | num(2) }}</span></div>
+      <div class="kv"><span>20 SMA</span><span>{{ c.dist_to_sma_20_pct | num(1) }}% / {{ c.dist_to_sma_20_adr | num(2) }}</span></div>
+      <div class="kv"><span>50 SMA</span><span>{{ c.dist_to_sma_50_pct | num(1) }}% / {{ c.dist_to_sma_50_adr | num(2) }}</span></div>
+
+      <h3>Earnings</h3>
+      <div class="kv"><span>Next</span><span>{{ c.earnings_label }}</span></div>
+      <div class="kv"><span>Timing</span><span>{{ c.earnings_when or 'unknown' }}</span></div>
+
+      <h3>Sizing (estimate)</h3>
+      <div class="kv"><span>Max shares</span><span>{{ c.shares | num(0) }}</span></div>
+      <div class="kv"><span>Bound by</span><span>{{ c.binding_cap }}</span></div>
+      <div class="kv"><span>Stop</span><span>{{ c.stop_price | num(2) }}</span></div>
+      <div class="kv"><span>Risk / share</span><span>{{ c.risk_per_share | num(2) }}</span></div>
+      <div class="kv"><span>Dollar risk</span><span>{{ c.actual_risk_dollars | num(0) }}</span></div>
+      <div class="kv"><span>Position</span><span>{{ c.position_dollars | money }}</span></div>
+      <div class="kv"><span>Preferred entry</span><span>{{ c.preferred_entry_low | num(2) }}–{{ c.preferred_entry_high | num(2) }}</span></div>
+      <div class="kv"><span>Max entry</span><span>{{ c.max_entry | num(2) }}</span></div>
+      <p class="est">Computed from the previous session's low and close. Recompute against
+      the real session low before acting.</p>
+
+      <h3>Exit plan (reference)</h3>
+      <div class="kv"><span>Day 1 stop</span><span>low of day</span></div>
+      <div class="kv"><span>Day 3–5</span><span>take 33–50%, stop to breakeven</span></div>
+      <div class="kv"><span>Trail</span><span>10-day SMA, exit on close below</span></div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+{% else %}
+<div class="card">
+  <div class="head"><span class="sym">No candidates</span></div>
+  <div class="stats">
+    <p>Nothing survived the gates. The funnel counts above show which gate removed what —
+    a scan that comes back empty in a chop is the screen working, not a bug.</p>
+  </div>
+</div>
+{% endif %}
+
+<footer>
+  <p><strong>This is a research and triage tool, not a trading system, and nothing in it
+  constitutes financial advice.</strong> Paper-trade the output for a meaningful period
+  before it informs real positions.</p>
+  <p>Gates and formulas tagged <code>[DOC]</code> come from the source material.
+  Consolidation metrics are <code>[EXT]</code> — the implementer's unvalidated
+  extrapolation. They contribute to the ranking order only and never remove a candidate.</p>
+  <p>A large share of the documented edge lives in the exit rules and position sizing,
+  neither of which a screener touches.</p>
+</footer>
+
+</body>
+</html>
