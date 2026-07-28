@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \".\" -Recurse -File)",
+      "Bash(Select-Object Name, Length, LastWriteTime)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(git push *)"
+    ]
+  }
+}
