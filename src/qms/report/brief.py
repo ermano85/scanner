@@ -98,6 +98,17 @@ def _pct_rank(value) -> str:
     return "n/a" if value is None else f"{float(value) * 100:.0f}p"
 
 
+def _money(value) -> str:
+    """Compact dollars — '61,322,448' is noise where '$61.3M' is a fact you can hold."""
+    if value is None:
+        return "n/a"
+    amount = float(value)
+    for threshold, suffix in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if abs(amount) >= threshold:
+            return f"${amount / threshold:,.1f}{suffix}"
+    return f"${amount:,.0f}"
+
+
 def _flags(row: dict) -> list[str]:
     flags = []
     if row.get("extended"):
@@ -125,7 +136,7 @@ def _candidate_block(row: dict, cfg: ScanConfig) -> str:
         "",
         f"- Character: ADR {_fmt(row.get('adr_pct'), 1, '%')}, "
         f"ATR {_fmt(row.get('atr_14'))}, "
-        f"avg $vol {_fmt(row.get('avg_dollar_vol_20'), 0)}",
+        f"avg $vol {_money(row.get('avg_dollar_vol_20'))}",
         f"- Momentum: 1m {_fmt(row.get('gain_1m'), 1, '%')} ({_pct_rank(row.get('gain_1m_pctile'))}), "
         f"3m {_fmt(row.get('gain_3m'), 1, '%')} ({_pct_rank(row.get('gain_3m_pctile'))}), "
         f"6m {_fmt(row.get('gain_6m'), 1, '%')} ({_pct_rank(row.get('gain_6m_pctile'))})",
@@ -177,8 +188,8 @@ def render_brief(result: ScanResult, cfg: ScanConfig) -> str:
         f"- Universe scanned: {result.universe_size:,}",
         f"- Passed liquidity (price, dollar volume, ADR): {result.after_liquidity:,}",
         f"- Final candidates: {result.candidates.height}",
-        f"- Account {_fmt(sizing.account, 0)}, risking {sizing.risk_pct:.2%} "
-        f"= {_fmt(risk_dollars, 0)} per trade",
+        f"- Account {_money(sizing.account)}, risking {sizing.risk_pct:.2%} "
+        f"= {_money(risk_dollars)} per trade",
         "",
         "Removed by each gate (counts overlap — a name can fail several):",
         "",

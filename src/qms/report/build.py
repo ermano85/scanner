@@ -119,6 +119,9 @@ def build_report(
     candidates = result.candidates
     if not candidates.is_empty() and adr_column in candidates.columns:
         candidates = candidates.with_columns(pl.col(adr_column).alias("adr_pct"))
+        # Push the alias back onto the result too — the brief and the CSV both read
+        # `adr_pct`, and leaving it local meant the brief printed "ADR n/a" for every row.
+        result.candidates = candidates
 
     rows: list[dict] = []
     for row in candidates.iter_rows(named=True):

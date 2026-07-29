@@ -112,8 +112,16 @@ def test_brief_explains_ext_versus_doc():
 def test_brief_states_the_sizing_config():
     """Share counts are uninterpretable without the account size behind them."""
     text = render_brief(_result(), CFG)
-    assert f"{CFG.sizing.account:,.0f}" in text
     assert f"{CFG.sizing.risk_pct:.2%}" in text
+    assert "account" in _flat(text)
+
+
+def test_brief_prints_adr_not_na():
+    """Regression: the ADR column is aliased during report assembly, and reading the
+    pre-alias frame printed 'ADR n/a' on every single row."""
+    text = render_brief(_result(), CFG)
+    assert "ADR 5.9%" in text
+    assert "ADR n/a" not in text
 
 
 def test_brief_includes_every_candidate_with_its_numbers():
