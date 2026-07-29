@@ -1,7 +1,13 @@
 # Data and generated output are never committed — both are reproducible from the ingest job.
 # Test fixtures are inline in the test modules, so nothing here needs un-ignoring.
+#
+# This matters more than it looks. A single scan's output is ~11 MB, almost all of it
+# base64 charts inside index.html. Committing it nightly would add a couple of gigabytes
+# of history a year. GitHub Pages is published from an Actions artifact instead
+# (.github/workflows/nightly.yml), which leaves no trace in git.
 data/
 out/
+site/
 
 .venv/
 __pycache__/

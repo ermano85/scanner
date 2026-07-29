@@ -28,6 +28,7 @@ from qms.ingest.base import (
     BARS_SCHEMA,
     EARNINGS_SCHEMA,
     UNIVERSE_SCHEMA,
+    valid_bars,
 )
 from qms.ingest.http import HttpClient, HttpError
 from qms.ingest.nasdaq_earnings import fetch_earnings_range
@@ -144,7 +145,9 @@ def ingest_bars(
         print(f"[ingest] {len(pending)} symbols pending ({len(manifest.completed)} already done)")
         _fetch_bars_batched(client, pending, start, end, manifest, actions_manifest)
 
-    before, after = store.compact(bars_dir, paths.BARS_FILE, BARS_SCHEMA, ["symbol", "date"])
+    before, after = store.compact(
+        bars_dir, paths.BARS_FILE, BARS_SCHEMA, ["symbol", "date"], validate=valid_bars
+    )
     print(f"[ingest] bars store: {before} -> {after} rows")
     a_before, a_after = store.compact(
         actions_dir, paths.ACTIONS_FILE, ACTIONS_SCHEMA, ["symbol", "date", "action"]

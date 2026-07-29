@@ -34,9 +34,15 @@ from qms.calendar import (
     shift_sessions,
     trading_days_between,
 )
-from qms.config import ScanConfig, load_scan_config
+from qms.config import (
+    ScanConfig,
+    UniverseConfig,
+    load_scan_config,
+    load_universe_config,
+)
 from qms.features.build import load_feature_store
-from qms.ingest.base import EARNINGS_SCHEMA
+from qms.ingest.base import EARNINGS_SCHEMA, empty
+from qms.ingest.sec_sic import SIC_SCHEMA, ensure_sic, load_cache
 from qms.ingest.store import read_parquet_or_empty
 from qms.quality import effective_latest_session
 from qms.rules import gates, rank, triggers
@@ -70,6 +76,22 @@ def resolve_as_of(as_of_date: dt.date | None) -> dt.date:
     return next_session(last_completed_session())
 
 
+def _resolve_sic(symbols: list[str], universe_cfg: UniverseConfig) -> pl.DataFrame:
+    """Fetch-and-cache classifications, degrading to the cache if SEC is unreachable.
+
+    A network failure here must not empty the watchlist. Falling back to whatever is
+    cached means unclassified names pass and are tagged, which is the same conservative
+    behaviour as a missing earnings date.
+    """
+    if not universe_cfg.exclude_sic or not symbols:
+        return empty(SIC_SCHEMA)
+    try:
+        return ensure_sic(symbols)
+    except Exception as exc:  # noqa: BLE001 — reported, then we fall back
+        print(f"[scan] SIC lookup failed ({exc}); using cached classifications only")
+        return load_cache()
+
+
 def latest_cross_section(
     features: pl.DataFrame,
     cfg: ScanConfig | None = None,
@@ -95,7 +117,17 @@ def latest_cross_section(
         return features, None, 0
 
     cfg = cfg or load_scan_config()
-    reference = effective_latest_session(features, cfg.quality.min_universe_coverage)
+    # Reference the *liquid* population, matching what the gap-fill repairs and the
+    # quality gate measures. Illiquid names lag the tape and would otherwise drag the
+    # reference date backwards for everyone.
+    liquid = set(
+        features.filter(pl.col("avg_dollar_vol_20") >= cfg.scan_a.gates.min_dollar_vol)[
+            "symbol"
+        ].unique()
+    )
+    reference = effective_latest_session(
+        features, cfg.quality.min_universe_coverage, liquid or None
+    )
     if reference is None:
         reference = features["date"].max()
 
@@ -112,9 +144,12 @@ def run_scan_a(
     cfg: ScanConfig | None = None,
     features: pl.DataFrame | None = None,
     earnings: pl.DataFrame | None = None,
+    sic: pl.DataFrame | None = None,
+    universe_cfg: UniverseConfig | None = None,
     echo: bool = False,
 ) -> ScanResult:
     cfg = cfg or load_scan_config()
+    universe_cfg = universe_cfg or load_universe_config()
     as_of = resolve_as_of(as_of_date)
 
     if features is None:
@@ -148,9 +183,15 @@ def run_scan_a(
     liquid = rank.add_momentum_percentiles(liquid)
     liquid = gates.apply_momentum_gate(liquid, cfg)
 
-    # 3. Remaining [DOC] gates.
+    # 3. Remaining [DOC] gates, plus the operator's sector exclusion.
     liquid = gates.apply_trend_gates(liquid, cfg)
     liquid = gates.attach_earnings(liquid, earnings, cfg, as_of)
+
+    # Resolved here rather than at universe level so SEC is only asked about the few
+    # hundred names that survive liquidity, not all 10,400 filers.
+    if sic is None:
+        sic = _resolve_sic(liquid["symbol"].to_list(), universe_cfg)
+    liquid = gates.attach_sector(liquid, sic, universe_cfg.exclude_sic)
 
     rejections.update(
         {

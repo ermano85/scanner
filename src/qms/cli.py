@@ -65,15 +65,26 @@ def ingest_cmd(
         False, "--full-universe", help="Refetch every symbol, not just the active set."
     ),
     symbols: str = typer.Option("", "--symbols", help="Comma-separated subset, for debugging."),
+    gapfill_only: bool = typer.Option(
+        False,
+        "--gapfill-only",
+        help="Skip the primary fetch; only repair under-covered sessions from the fallback source.",
+    ),
 ) -> None:
     """Fetch universe, bars and earnings. Idempotent and resumable."""
+    subset = [s.strip().upper() for s in symbols.split(",") if s.strip()] or None
+
+    if gapfill_only:
+        from qms.calendar import last_completed_session
+        from qms.config import load_scan_config as _scan, load_universe_config as _universe
+        from qms.ingest.gapfill import run_gapfill
+
+        run_gapfill(_scan(), _universe(), last_completed_session(), symbols=subset)
+        return
+
     from qms.ingest.run import run_ingest
 
-    run_ingest(
-        backfill=backfill,
-        full_universe=full_universe,
-        symbols=[s.strip().upper() for s in symbols.split(",") if s.strip()] or None,
-    )
+    run_ingest(backfill=backfill, full_universe=full_universe, symbols=subset)
 
 
 @app.command("features")
@@ -106,10 +117,54 @@ def report_cmd(
     build_report(as_of_date=_parse_as_of(as_of))
 
 
+@app.command("brief")
+def brief_cmd(
+    as_of: str = typer.Option("", "--as-of", help="Session the watchlist is FOR (YYYY-MM-DD)."),
+) -> None:
+    """Write the compact markdown/JSON summary, without re-rendering charts."""
+    from qms.config import load_scan_config as _scan
+    from qms.paths import scan_out_dir
+    from qms.report.brief import write_brief
+    from qms.rules.scan_a import run_scan_a
+
+    cfg = _scan()
+    result = run_scan_a(as_of_date=_parse_as_of(as_of), cfg=cfg)
+    write_brief(result, cfg, scan_out_dir(result.as_of_date))
+
+
+@app.command("export-tradingview")
+def export_tradingview_cmd(
+    as_of: str = typer.Option("", "--as-of", help="Session the watchlist is FOR (YYYY-MM-DD)."),
+) -> None:
+    """Write a TradingView-importable watchlist for a scan date."""
+    from qms.paths import scan_out_dir
+    from qms.report.tradingview import write_watchlist
+    from qms.rules.scan_a import run_scan_a
+
+    result = run_scan_a(as_of_date=_parse_as_of(as_of))
+    write_watchlist(result.candidates, result.as_of_date, scan_out_dir(result.as_of_date))
+
+
+@app.command("publish")
+def publish_cmd(
+    as_of: str = typer.Option("", "--as-of", help="Scan date to publish. Default: the newest."),
+    dest: str = typer.Option("site", "--dest", help="Directory to assemble."),
+) -> None:
+    """Copy a scan's output into a directory ready for static hosting."""
+    from pathlib import Path as _Path
+
+    from qms.report.publish import publish
+
+    publish(as_of=_parse_as_of(as_of), dest=_Path(dest))
+
+
 @app.command("nightly")
 def nightly_cmd(
     as_of: str = typer.Option("", "--as-of", help="Session the watchlist is FOR (YYYY-MM-DD)."),
     skip_ingest: bool = typer.Option(False, "--skip-ingest", help="Reuse the stored bars."),
+    skip_gapfill: bool = typer.Option(
+        False, "--skip-gapfill", help="Do not repair under-covered sessions."
+    ),
     full_universe: bool = typer.Option(
         False, "--full-universe", help="Refetch every symbol, not just the active set."
     ),
@@ -126,6 +181,7 @@ def nightly_cmd(
     run_nightly(
         as_of_date=_parse_as_of(as_of),
         skip_ingest=skip_ingest,
+        skip_gapfill=skip_gapfill,
         full_universe=full_universe,
         allow_stale=allow_stale,
     )
@@ -137,19 +193,21 @@ def quality_cmd(
 ) -> None:
     """Run the data-quality gate against the current stores."""
     from qms.calendar import last_completed_session
-    from qms.config import load_scan_config as _load
+    from qms.config import load_scan_config as _scan, load_universe_config as _universe
     from qms.ingest.base import ACTIONS_SCHEMA, BARS_SCHEMA, UNIVERSE_SCHEMA
     from qms.ingest.store import read_parquet_or_empty
-    from qms.quality import check_quality, enforce
+    from qms.quality import active_universe, check_quality, enforce
     from qms import paths as _paths
 
+    bars = read_parquet_or_empty(_paths.BARS_FILE, BARS_SCHEMA)
     enforce(
         check_quality(
-            bars=read_parquet_or_empty(_paths.BARS_FILE, BARS_SCHEMA),
+            bars=bars,
             universe=read_parquet_or_empty(_paths.UNIVERSE_FILE, UNIVERSE_SCHEMA),
             actions=read_parquet_or_empty(_paths.ACTIONS_FILE, ACTIONS_SCHEMA),
-            cfg=_load(),
+            cfg=_scan(),
             expected_session=last_completed_session(),
+            active=active_universe(bars, _universe().gapfill_floor_dollar_vol),
         ),
         allow_stale=allow_stale,
     )

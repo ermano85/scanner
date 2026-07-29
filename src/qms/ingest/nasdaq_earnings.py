@@ -33,8 +33,13 @@ _TIME_MAP = {
 }
 
 
-def _clean_number(raw: str | None) -> float | None:
-    """Nasdaq formats numbers as '$3.23', '($0.14)', '$673,938,031,023' or ''."""
+def clean_number(raw: str | None) -> float | None:
+    """Nasdaq formats numbers as '$3.23', '($0.14)', '$673,938,031,023' or ''.
+
+    Public because the historical-bars endpoint in `nasdaq_bars` serves the same dialect —
+    prices with a leading '$' on equities but not on ETFs, and volumes with thousands
+    separators. One parser, one set of edge cases.
+    """
     if not raw:
         return None
     text = raw.strip().replace("$", "").replace(",", "")
@@ -64,8 +69,8 @@ def fetch_earnings_for_date(client: HttpClient, day: dt.date) -> pl.DataFrame:
                 "symbol": symbol,
                 "earnings_date": day,
                 "when": _TIME_MAP.get(row.get("time") or "", _WHEN_UNKNOWN),
-                "eps_forecast": _clean_number(row.get("epsForecast")),
-                "market_cap": _clean_number(row.get("marketCap")),
+                "eps_forecast": clean_number(row.get("epsForecast")),
+                "market_cap": clean_number(row.get("marketCap")),
                 "fiscal_quarter_ending": (row.get("fiscalQuarterEnding") or None),
             }
         )

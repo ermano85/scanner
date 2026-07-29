@@ -14,7 +14,7 @@ import pytest
 from qms.config import UniverseConfig
 from qms.ingest import store
 from qms.ingest.base import BARS_SCHEMA, conform, empty
-from qms.ingest.nasdaq_earnings import _clean_number, fetch_earnings_for_date
+from qms.ingest.nasdaq_earnings import clean_number, fetch_earnings_for_date
 from qms.ingest.universe import apply_universe_filters, to_vendor_symbol
 from qms.ingest.yahoo import parse_actions, parse_bars
 
@@ -133,7 +133,9 @@ def _universe_cfg(**overrides) -> UniverseConfig:
         "exclude_suffixes": ["W", "U", "R"],
         "exclude_name_patterns": [r"\bLeveraged\b"],
         "exclude_symbols": ["BADSYM"],
+        "exclude_sic": [2834],
         "active_universe_floor_dollar_vol": 2_000_000.0,
+        "gapfill_floor_dollar_vol": 10_000_000.0,
     }
     base.update(overrides)
     return UniverseConfig.model_validate(base)
@@ -202,7 +204,7 @@ def test_vendor_symbol_mapping():
     ],
 )
 def test_nasdaq_number_cleaning(raw, expected):
-    assert _clean_number(raw) == expected
+    assert clean_number(raw) == expected
 
 
 class _StubClient:

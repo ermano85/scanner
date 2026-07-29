@@ -134,6 +134,13 @@ quality:
   max_bar_age_sessions: 3
   # Minimum symbols in the bar store before a scan is meaningful at all.
   min_symbols: 500
+  # How far outside [low, high] a close may sit before the bar is called corrupt.
+  # Vendors round OHLC fields independently, so tiny excursions are normal: FXF on
+  # 2026-07-28 closed 107.550003 against a low of 107.552399, out by 0.0024 on a $107
+  # stock. That is rounding, not bad data. Genuine corruption looks nothing like it —
+  # BGFI the same day had open=high=low=0 beside a close of 25.13, which the ingest
+  # parsers now reject outright.
+  ohlc_tolerance_pct: 0.05
   # A single-session move beyond this is treated as suspicious unless a split explains it.
   jump_threshold_pct: 40.0
   # How many recent sessions to scan for unexplained jumps.

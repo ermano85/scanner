@@ -17,12 +17,14 @@ UNIVERSE_DIR = DATA_DIR / "universe"
 EARNINGS_DIR = DATA_DIR / "earnings"
 ACTIONS_DIR = DATA_DIR / "actions"
 FEATURES_DIR = DATA_DIR / "features"
+REFERENCE_DIR = DATA_DIR / "reference"
 
 BARS_FILE = BARS_DIR / "bars.parquet"
 UNIVERSE_FILE = UNIVERSE_DIR / "universe.parquet"
 EARNINGS_FILE = EARNINGS_DIR / "earnings.parquet"
 ACTIONS_FILE = ACTIONS_DIR / "actions.parquet"
 FEATURES_FILE = FEATURES_DIR / "features.parquet"
+SIC_FILE = REFERENCE_DIR / "sic.parquet"
 
 
 def raw_batch_dir(kind: str, run_date: dt.date) -> Path:
@@ -42,6 +44,7 @@ def ensure_dirs() -> None:
         EARNINGS_DIR,
         ACTIONS_DIR,
         FEATURES_DIR,
+        REFERENCE_DIR,
         OUT_DIR,
     ):
         path.mkdir(parents=True, exist_ok=True)

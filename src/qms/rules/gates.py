@@ -27,9 +27,12 @@ GATE_MA_STACK = "ma_stack"
 GATE_ABOVE_50 = "above_50"
 GATE_EARNINGS = "earnings"
 GATE_MOMENTUM = "momentum"
+GATE_SECTOR = "sector"
 
 # Tag for a symbol the earnings feed simply has no row for.
 EARNINGS_UNKNOWN = "EARNINGS_UNKNOWN"
+# Tag for a symbol with no SEC industry classification — ETFs, most foreign issuers.
+SIC_UNKNOWN = "SIC_UNKNOWN"
 
 
 def apply_liquidity_gates(latest: pl.DataFrame, cfg: ScanConfig) -> pl.DataFrame:
@@ -136,6 +139,42 @@ def attach_earnings(
             .otherwise(pl.col("days_to_earnings") > blackout_days)
         )
         .alias(f"pass_{GATE_EARNINGS}")
+    )
+
+
+def attach_sector(
+    latest: pl.DataFrame,
+    sic: pl.DataFrame,
+    excluded_sic: list[int],
+) -> pl.DataFrame:
+    """Attach SEC industry classification and exclude unwanted sectors.
+
+    **This is an operator preference, not a rule from the source material.** It is not
+    tagged `[DOC]`: nothing in the Laws of Swing doc says avoid pharma. It is here because
+    the operator judged clinical-stage binaries unpredictable, and it belongs in config so
+    that judgment stays visible and reversible.
+
+    **Symbols with no classification pass**, tagged `SIC_UNKNOWN` — the same reasoning as
+    a missing earnings date. ETFs have no meaningful SIC and most foreign issuers file no
+    US registration, so failing them closed would silently delete a large, arbitrary slice
+    of the universe.
+    """
+    if sic.is_empty():
+        return latest.with_columns(
+            pl.lit(None, dtype=pl.Int32).alias("sic"),
+            pl.lit(None, dtype=pl.Utf8).alias("sic_description"),
+            pl.lit(True).alias("sic_unknown"),
+            pl.lit(True).alias(f"pass_{GATE_SECTOR}"),
+        )
+
+    joined = latest.join(
+        sic.select("symbol", "sic", "sic_description"), on="symbol", how="left"
+    )
+    return joined.with_columns(
+        pl.col("sic").is_null().alias("sic_unknown"),
+        (pl.col("sic").is_null() | ~pl.col("sic").is_in(excluded_sic)).alias(
+            f"pass_{GATE_SECTOR}"
+        ),
     )
 
 

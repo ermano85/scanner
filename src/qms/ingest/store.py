@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -141,22 +142,34 @@ def compact(
     target: Path,
     schema: dict[str, pl.DataType],
     keys: list[str],
+    validate: Callable[[pl.DataFrame], pl.DataFrame] | None = None,
 ) -> tuple[int, int]:
     """Fold raw batches into the canonical store.
 
     Newly fetched rows win over stored rows for the same key, which is what makes a
     re-run a no-op and lets a vendor restatement correct itself. Returns
     (rows_before, rows_after).
+
+    `validate` is applied to the combined result, not just the incoming rows, so the
+    canonical store converges on being clean no matter which parser wrote it or when. That
+    matters because a validation rule is usually added *after* something bad has already
+    been stored — the alternative is a one-off cleanup script that has to be remembered.
     """
     incoming = read_batches(batch_dir, schema)
     existing = read_parquet_or_empty(target, schema)
     rows_before = existing.height
 
-    if incoming.is_empty():
+    if incoming.is_empty() and validate is None:
         return rows_before, rows_before
 
-    combined = pl.concat([existing, incoming], how="vertical_relaxed")
+    combined = (
+        pl.concat([existing, incoming], how="vertical_relaxed")
+        if not incoming.is_empty()
+        else existing
+    )
     # keep="last" => incoming supersedes existing, since it is concatenated second.
     combined = combined.unique(subset=keys, keep="last").sort(keys)
+    if validate is not None:
+        combined = validate(combined)
     write_parquet_atomic(combined, target)
     return rows_before, combined.height

@@ -19,7 +19,14 @@ from zoneinfo import ZoneInfo
 
 import polars as pl
 
-from qms.ingest.base import ACTIONS_SCHEMA, BARS_SCHEMA, ProviderError, conform, empty
+from qms.ingest.base import (
+    ACTIONS_SCHEMA,
+    BARS_SCHEMA,
+    ProviderError,
+    conform,
+    empty,
+    valid_bars,
+)
 from qms.ingest.http import HttpClient, HttpError
 from qms.ingest.universe import to_vendor_symbol
 
@@ -108,14 +115,9 @@ def parse_bars(symbol: str, result: dict, max_date: dt.date) -> pl.DataFrame:
     )
 
     frame = (
-        frame
-        # Halted sessions come back as an all-null row. A null OHLC is not a bar.
-        .filter(
-            pl.col("close").is_not_null()
-            & pl.col("open").is_not_null()
-            & pl.col("high").is_not_null()
-            & pl.col("low").is_not_null()
-        )
+        # Unsettled sessions come back all-null, and occasionally with zeroed OHL beside a
+        # real close. `valid_bars` handles both; see its docstring for the observed cases.
+        valid_bars(frame)
         .filter(pl.col("date") <= max_date)
         # Yahoo occasionally repeats the final timestamp when a live bar and the settled
         # bar for the same session both appear; last wins.

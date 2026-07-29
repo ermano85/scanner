@@ -1,0 +1,90 @@
+name: nightly scan
+
+# Backup to the local scheduled run, which is authoritative. The two are fully
+# independent: each maintains its own bar store and neither waits on the other. Both are
+# deterministic for a given session, so whichever runs produces the same watchlist.
+#
+# 05:00 UTC Tue-Sat covers the Mon-Fri US sessions, well after the 20:00/21:00 UTC close.
+on:
+  schedule:
+    - cron: "0 5 * * 2-6"
+  workflow_dispatch:
+    inputs:
+      allow_stale:
+        description: "Publish even if the vendor is missing recent sessions"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two runs write the Pages deployment at once, and let a newer scan win.
+concurrency:
+  group: nightly-scan
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # Only the durable stores. Features are ~880 MB and rebuild from bars in ~13 s, so
+      # caching them would cost far more than it saves.
+      - name: Restore market data
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/bars
+            data/earnings
+            data/universe
+            data/actions
+            data/reference
+          key: qms-data-${{ github.run_id }}
+          restore-keys: |
+            qms-data-
+
+      # A cold cache has no bars at all, and the nightly path only refreshes the active
+      # set. Seed it once so the first run on a fresh cache has something to work with.
+      - name: Seed the bar store if the cache was empty
+        run: |
+          if [ ! -f data/bars/bars.parquet ]; then
+            echo "cold cache — running a full backfill (this is slow, once)"
+            uv run qms ingest --backfill
+          fi
+
+      - name: Run the nightly scan
+        run: |
+          uv run qms nightly ${{ inputs.allow_stale && '--allow-stale' || '' }}
+
+      - name: Assemble the site
+        run: uv run qms publish --dest site
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      # Runs even on failure so a blocked endpoint is visible rather than silent.
+      - name: Report data quality
+        if: always()
+        run: uv run qms quality --allow-stale || true

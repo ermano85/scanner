@@ -41,22 +41,34 @@ class DataQualityError(RuntimeError):
         )
 
 
-def effective_latest_session(bars: pl.DataFrame, min_coverage: float) -> dt.date | None:
+def effective_latest_session(
+    bars: pl.DataFrame,
+    min_coverage: float,
+    symbols: set[str] | None = None,
+) -> dt.date | None:
     """The most recent session where enough of the universe actually has a bar.
 
     The vendor's trailing edge is ragged: a handful of symbols routinely carry a bar for a
     session that is missing for everyone else. Any logic keyed on `max(date)` is therefore
     wrong in two ways at once — it declares stale data fresh, and it builds a
     cross-section that mixes two different sessions. This is the honest reference date.
+
+    `symbols` restricts both the numerator and the denominator to a population of
+    interest — in practice the *active* universe. That restriction is what keeps the
+    measurement honest alongside a gap-fill that only repairs tradeable names: repairing
+    3,000 of 11,574 symbols and then measuring coverage across all 11,574 would report a
+    permanent 26% and fail forever. Measured population must match repaired population.
     """
     if bars.is_empty():
         return None
-    total = bars["symbol"].n_unique()
+
+    scoped = bars.filter(pl.col("symbol").is_in(list(symbols))) if symbols else bars
+    total = scoped["symbol"].n_unique()
     if not total:
         return None
 
     per_date = (
-        bars.group_by("date")
+        scoped.group_by("date")
         .agg(pl.col("symbol").n_unique().alias("symbols"))
         .filter(pl.col("symbols") >= min_coverage * total)
     )
@@ -65,14 +77,40 @@ def effective_latest_session(bars: pl.DataFrame, min_coverage: float) -> dt.date
     return per_date["date"].max()
 
 
+def active_universe(bars: pl.DataFrame, floor_dollar_vol: float, window: int = 20) -> set[str]:
+    """Symbols whose recent average dollar volume clears a floor.
+
+    Shared by the gap-fill (what to repair), the quality gate (what to measure) and the
+    scan (which session to treat as the reference), so all three agree on the population.
+    """
+    if bars.is_empty():
+        return set()
+    recent = (
+        bars.sort(["symbol", "date"])
+        .group_by("symbol", maintain_order=True)
+        .tail(window)
+        .with_columns((pl.col("close") * pl.col("volume")).alias("dollar_vol"))
+        .group_by("symbol")
+        .agg(pl.col("dollar_vol").mean().alias("avg_dollar_vol"))
+        .filter(pl.col("avg_dollar_vol") >= floor_dollar_vol)
+    )
+    return set(recent["symbol"].to_list())
+
+
 def check_quality(
     bars: pl.DataFrame,
     universe: pl.DataFrame,
     actions: pl.DataFrame,
     cfg: ScanConfig,
     expected_session: dt.date,
+    active: set[str] | None = None,
 ) -> list[QualityIssue]:
-    """Every issue found, worst first. Empty list means the data is fit to scan."""
+    """Every issue found, worst first. Empty list means the data is fit to scan.
+
+    `active` scopes the coverage and staleness checks to the tradeable population — see
+    `effective_latest_session`. Passing None measures every stored symbol, which is the
+    right choice only when nothing has been selectively repaired.
+    """
     issues: list[QualityIssue] = []
     quality = cfg.quality
 
@@ -96,15 +134,16 @@ def check_quality(
     # reported the data as fresh while 99.6% of the market was a day behind. Staleness is
     # therefore measured against the newest *well-covered* session.
     newest_raw = bars["date"].max()
-    newest = effective_latest_session(bars, quality.min_universe_coverage)
+    newest = effective_latest_session(bars, quality.min_universe_coverage, active)
+    scope = f"{len(active)} active" if active else f"{symbol_count} stored"
 
     if newest is None:
         issues.append(
             QualityIssue(
                 "thin_coverage",
                 SEVERITY_ERROR,
-                f"no session reaches {quality.min_universe_coverage:.0%} coverage; the "
-                "ingest is incomplete",
+                f"no session reaches {quality.min_universe_coverage:.0%} coverage of the "
+                f"{scope} symbols; the ingest is incomplete",
             )
         )
         newest = newest_raw
@@ -147,17 +186,23 @@ def check_quality(
             )
         )
 
+    # Tolerance, because vendors round each OHLC field independently and a close can sit a
+    # fraction of a cent outside its own low. Without it this fires on healthy data and
+    # gets muted, which would cost the check its value for the corruption it exists to
+    # catch — zeroed OHL beside a real close, or a high below its low.
+    slack = pl.col("close") * (quality.ohlc_tolerance_pct / 100.0)
     inverted = bars.filter(
         (pl.col("high") < pl.col("low"))
-        | (pl.col("close") > pl.col("high"))
-        | (pl.col("close") < pl.col("low"))
+        | (pl.col("close") > pl.col("high") + slack)
+        | (pl.col("close") < pl.col("low") - slack)
     ).height
     if inverted:
         issues.append(
             QualityIssue(
                 "impossible_bars",
                 SEVERITY_ERROR,
-                f"{inverted} bar(s) violate low <= close <= high",
+                f"{inverted} bar(s) violate low <= close <= high beyond a "
+                f"{quality.ohlc_tolerance_pct}% rounding tolerance",
             )
         )
 

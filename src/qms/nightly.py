@@ -16,10 +16,11 @@ from qms.calendar import last_completed_session, next_session
 from qms.config import load_scan_config, load_universe_config
 from qms.features.build import build_feature_store
 from qms.ingest.base import ACTIONS_SCHEMA, BARS_SCHEMA, UNIVERSE_SCHEMA
+from qms.ingest.gapfill import run_gapfill
 from qms.ingest.http import HttpClient
 from qms.ingest.run import run_ingest
 from qms.ingest.store import read_parquet_or_empty
-from qms.quality import check_quality, enforce
+from qms.quality import active_universe, check_quality, enforce
 from qms.report.build import build_report
 from qms.rules.scan_a import run_scan_a
 
@@ -27,6 +28,7 @@ from qms.rules.scan_a import run_scan_a
 def run_nightly(
     as_of_date: dt.date | None = None,
     skip_ingest: bool = False,
+    skip_gapfill: bool = False,
     full_universe: bool = False,
     allow_stale: bool = False,
 ) -> Path:
@@ -47,14 +49,27 @@ def run_nightly(
     else:
         print("[nightly] skipping ingest")
 
-    build_feature_store(cfg=cfg)
+    # Repair before features are built, so the quality gate below judges the data the scan
+    # will actually use. Isolated in its own try: the fallback source is unofficial too,
+    # and a failure here must leave the primary store intact rather than aborting a run
+    # whose data may well be fine.
+    if not skip_gapfill:
+        try:
+            run_gapfill(cfg, universe_cfg, expected_session, client=HttpClient())
+        except Exception as exc:  # noqa: BLE001 — reported, then the gate decides
+            print(f"[nightly] gap-fill failed ({exc}); continuing to the quality gate")
 
+    build_feature_store(cfg=cfg, rebuild=True)
+
+    bars = read_parquet_or_empty(paths.BARS_FILE, BARS_SCHEMA)
     issues = check_quality(
-        bars=read_parquet_or_empty(paths.BARS_FILE, BARS_SCHEMA),
+        bars=bars,
         universe=read_parquet_or_empty(paths.UNIVERSE_FILE, UNIVERSE_SCHEMA),
         actions=read_parquet_or_empty(paths.ACTIONS_FILE, ACTIONS_SCHEMA),
         cfg=cfg,
         expected_session=expected_session,
+        # Same population the gap-fill repairs; see gapfill_floor_dollar_vol.
+        active=active_universe(bars, universe_cfg.gapfill_floor_dollar_vol),
     )
     enforce(issues, allow_stale=allow_stale)
 

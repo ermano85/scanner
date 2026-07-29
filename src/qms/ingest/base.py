@@ -73,6 +73,36 @@ def conform(df: pl.DataFrame, schema: dict[str, pl.DataType]) -> pl.DataFrame:
     return df.select([pl.col(name).cast(dtype) for name, dtype in schema.items()])
 
 
+def valid_bars(frame: pl.DataFrame) -> pl.DataFrame:
+    """Drop rows that are not bars, whatever the vendor called them.
+
+    Every source in this project emits some of these, so the rule lives here rather than
+    in each parser:
+
+    * **Any null in OHLCV.** Yahoo serves all-null rows for sessions it has not settled;
+      Nasdaq omits volume for some thinly traded ETFs. A bar missing a field is not a bar,
+      and forward-filling one would fabricate a session.
+    * **Zero or negative prices.** Observed on Yahoo 2026-07-28 for BGFI, BMSI and MSSE:
+      `open = high = low = 0` alongside a real close. That is a placeholder, not a session,
+      and it would produce an infinite ADR and a nonsense stop.
+    * **high < low.** Structurally impossible; indicates a mangled response.
+
+    Zero *volume* is left alone — a halted or untraded session legitimately has none.
+    """
+    return frame.filter(
+        pl.col("open").is_not_null()
+        & pl.col("high").is_not_null()
+        & pl.col("low").is_not_null()
+        & pl.col("close").is_not_null()
+        & pl.col("volume").is_not_null()
+        & (pl.col("open") > 0)
+        & (pl.col("high") > 0)
+        & (pl.col("low") > 0)
+        & (pl.col("close") > 0)
+        & (pl.col("high") >= pl.col("low"))
+    )
+
+
 class ProviderError(RuntimeError):
     """A provider failed in a way the caller should surface, not swallow."""
 

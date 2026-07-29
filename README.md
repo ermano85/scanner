@@ -84,9 +84,11 @@ All free, all verified reachable on 2026-07-27.
 | Need | Source | Official? |
 |---|---|---|
 | Universe, ETF and test-issue flags | NASDAQ Trader symbol directory | Yes |
-| Daily OHLCV (split-adjusted) | Yahoo `v8/finance/chart` | **No** |
+| Daily OHLCV (split-adjusted), primary | Yahoo `v8/finance/chart` | **No** |
+| Daily OHLCV, gap-fill fallback | Nasdaq `api.nasdaq.com/api/quote/{sym}/historical` | **No** |
 | Split and dividend events | Yahoo, same endpoint | **No** |
 | Earnings calendar, past and upcoming | Nasdaq `api.nasdaq.com/api/calendar/earnings` | **No** |
+| Industry classification (SIC) | SEC EDGAR `submissions` | Yes |
 
 ### Read this before trusting the output
 
@@ -149,3 +151,60 @@ over: it calls stale data fresh, and it builds a cross-section mixing two sessio
 42 names an extra day of return in every percentile. The scan pins to the newest *well-covered*
 session instead, and drops symbols whose last bar is more than `quality.max_bar_age_sessions`
 behind it.
+
+**That missing session was a Yahoo defect, not missing market data.** It was originally documented
+here as a whole-market hole and an unavoidable cost of not paying for a feed. That was wrong.
+Nasdaq's free endpoint had the session all along — AAPL closed $333.02 on 47.5M shares — so the
+fix was a fallback chain, not a subscription. Yahoo stays primary for bulk history; the gap-fill
+in `src/qms/ingest/gapfill.py` repairs the trailing edge from Nasdaq. Full write-up in
+[docs/DATA.md](docs/DATA.md).
+
+## Sector exclusion
+
+`config/universe.yaml` excludes SEC SIC codes 2833–2836 — pharmaceuticals, biologics and
+diagnostics.
+
+**This is an operator preference, not a rule from the source material.** Nothing in the Laws of
+Swing doc says avoid pharma; it is here because clinical-stage biotech moves on binary trial and
+FDA outcomes that no chart pattern anticipates. It is tagged as neither `[DOC]` nor `[EXT]` for
+that reason, and it lives in config so the judgment stays visible and reversible.
+
+Measured cost: this removes **25 of 60** candidates on the 2026-07-27 scan. The strategy needs
+ADR% ≥ 5 and biotech is where much of that volatility lives, so expect materially shorter lists.
+If they get too short, loosen `min_adr` or `min_dollar_vol` rather than re-admitting the sector.
+
+Classifications come from SEC EDGAR — free, official, and the only such source in the pipeline.
+Lookups are lazy and permanently cached in `data/reference/sic.parquet`: only names that clear the
+liquidity gates are ever requested, roughly 545 on the first run. Symbols with no classification
+(ETFs, most foreign issuers) **pass** and are tagged `SIC_UNKNOWN`.
+
+## Exports
+
+Each scan writes, alongside the HTML report:
+
+| File | Purpose |
+|---|---|
+| `ranked.csv` | The full numeric table |
+| `claude-brief.md` | Self-contained summary for pasting into a conversation |
+| `claude-brief.json` | The same content, machine-readable |
+| `tradingview.txt` | Comma-separated `EXCHANGE:SYMBOL` for *Upload list…* |
+
+The brief carries its own caveats — what the tool does not do, which numbers are unvalidated,
+that sizing is a pre-open estimate. Caveats left behind in this README are caveats that do not
+travel with the file.
+
+## Scheduling
+
+Two independent runs, neither waiting on the other. Both are deterministic for a given session,
+so whichever runs produces the same watchlist.
+
+- **Local, authoritative.** `scripts/nightly.ps1` under Task Scheduler at 00:30 local (~17:30 New
+  York, ninety minutes after the close). Registration command is in the script header. Runs from
+  your own IP, which is what these unofficial endpoints tolerate.
+- **GitHub Actions, backup.** `.github/workflows/nightly.yml`, 05:00 UTC Tue–Sat, publishing to
+  Pages from an artifact so nothing lands in git history. Free and unmetered on a public repo.
+
+**Known risk:** Yahoo and Nasdaq are unofficial endpoints and are known to rate-limit datacenter
+IP ranges — which is exactly what GitHub runners are. The Actions job may simply not work. That is
+why local is primary. If Actions proves unreliable, the fix is an authenticated source (EODHD is
+about $20/month) rather than more retries.

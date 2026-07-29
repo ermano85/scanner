@@ -45,7 +45,39 @@ exclude_name_patterns:
 # Hand-maintained escape hatch. Anything here is dropped unconditionally.
 exclude_symbols: []
 
+# SEC SIC industry codes to exclude. OPERATOR PREFERENCE, not a rule from the source
+# material — nothing in the Laws of Swing doc says avoid pharma. It is here because
+# clinical-stage biotech moves on binary FDA and trial outcomes that no chart pattern
+# anticipates.
+#
+#   2833  Medicinal Chemicals & Botanical Products
+#   2834  Pharmaceutical Preparations
+#   2835  In Vitro & In Vivo Diagnostic Substances
+#   2836  Biological Products (No Diagnostic Substances)
+#
+# Measured cost on the 2026-07-27 scan: removes 25 of 60 candidates. This strategy needs
+# ADR% >= 5 and biotech is where much of that volatility lives, so expect materially
+# shorter lists. If they get too short, loosen min_adr or min_dollar_vol rather than
+# re-admitting the sector.
+#
+# Symbols with no SEC classification (ETFs, most foreign issuers) are NOT excluded; they
+# are tagged SIC_UNKNOWN and pass.
+exclude_sic: [2833, 2834, 2835, 2836]
+
 # Names below this 20d average dollar volume are not refetched nightly. Deliberately an
 # order of magnitude below scan_a.gates.min_dollar_vol so a name can grow into
-# eligibility between weekly full refreshes.
+# eligibility between weekly full refreshes. Cheap: the primary source answers in ~0.3 s.
 active_universe_floor_dollar_vol: 2000000.0
+
+# Separate, much higher floor for the gap-fill repair path, because that source is ~10x
+# slower per request (~3 s) and there is no bulk endpoint — Yahoo's multi-symbol quote
+# returns 401 without a crumb, and Nasdaq's bulk screener carries no open/high/low.
+#
+# Repairing the full 2M active set meant ~5,400 sequential-ish requests and a 45-60 minute
+# nightly. Half the scan's own min_dollar_vol keeps roughly a thousand names: everything
+# that could plausibly pass the gate, plus headroom for a name growing into eligibility,
+# and it runs in a few minutes.
+#
+# Coverage is measured against this same population — measured scope must equal repaired
+# scope or the quality gate can never be satisfied.
+gapfill_floor_dollar_vol: 10000000.0

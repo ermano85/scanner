@@ -18,7 +18,9 @@ from qms import paths
 from qms.config import ScanConfig, load_scan_config
 from qms.ingest.base import BARS_SCHEMA
 from qms.ingest.store import read_parquet_or_empty
+from qms.report.brief import write_brief
 from qms.report.charts import render_chart
+from qms.report.tradingview import write_watchlist
 from qms.rules.scan_a import ScanResult, run_scan_a
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -31,7 +33,8 @@ CSV_COLUMNS = [
     "dist_to_sma_10_pct", "dist_to_sma_10_adr",
     "dist_to_sma_20_pct", "dist_to_sma_20_adr",
     "dist_to_sma_50_pct", "dist_to_sma_50_adr",
-    "triggers", "next_earnings_date", "earnings_when", "days_to_earnings",
+    "triggers", "sic", "sic_description",
+    "next_earnings_date", "earnings_when", "days_to_earnings",
     "avg_vol_20", "avg_dollar_vol_20",
     "shares", "binding_cap", "stop_price", "risk_per_share", "actual_risk_dollars",
     "position_dollars", "preferred_entry_low", "preferred_entry_high", "max_entry",
@@ -168,6 +171,11 @@ def build_report(
         pl.DataFrame(schema={c: pl.Utf8 for c in available or ["symbol"]}).write_csv(csv_path)
     else:
         candidates.select(available).write_csv(csv_path)
+
+    # Both exports are derived from the same ranked frame, so they can never disagree with
+    # the HTML about what tonight's list is.
+    write_brief(result, cfg, out_dir)
+    write_watchlist(candidates, result.as_of_date, out_dir)
 
     print(f"[report] {len(rows)} candidate(s) -> {html_path}")
     return html_path

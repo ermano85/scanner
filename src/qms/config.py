@@ -178,6 +178,7 @@ class QualityConfig(_Strict):
     min_universe_coverage: float = Field(ge=0.0, le=1.0)
     max_bar_age_sessions: int
     min_symbols: int
+    ohlc_tolerance_pct: float
     jump_threshold_pct: float
     jump_lookback_sessions: int
     max_unexplained_jump_share: float = Field(ge=0.0, le=1.0)
@@ -237,7 +238,9 @@ class UniverseConfig(_Strict):
     exclude_suffixes: list[str]
     exclude_name_patterns: list[str]
     exclude_symbols: list[str]
+    exclude_sic: list[int]
     active_universe_floor_dollar_vol: float
+    gapfill_floor_dollar_vol: float
 
     def enabled_exchanges(self) -> set[str]:
         return {code for code, on in self.exchanges.items() if on}
