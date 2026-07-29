@@ -156,10 +156,16 @@ def test_brief_handles_an_empty_scan():
 
 
 def test_brief_stays_small_enough_to_paste(tmp_path):
-    """The HTML report is ~7 MB of base64. This has to be pasteable."""
-    big = pl.concat([_candidates()] * 30)
+    """The HTML report is ~7 MB of base64. This has to be pasteable.
+
+    Sized with the price paths included, since those are the bulk of a candidate block —
+    a real 42-name scan lands at ~49 KB, so a full 60 must still leave headroom.
+    """
+    big = pl.concat([_with_shape(_candidates())] * 30)
     big = big.with_columns(pl.int_range(pl.len()).add(1).alias("rank"))
-    path = write_brief(_result(big), CFG, tmp_path)
+    bars = pl.concat([_bars_for("CERT"), _bars_for("SNOW")])
+
+    path = write_brief(_result(big), CFG, tmp_path, bars=bars)
     size_kb = path.stat().st_size / 1024
     assert size_kb < 100, f"brief is {size_kb:.0f} KB for {big.height} candidates"
 
@@ -172,6 +178,82 @@ def test_brief_json_is_valid_and_carries_the_disclaimer(tmp_path):
         CFG.sizing.account * CFG.sizing.risk_pct
     )
     assert [c["symbol"] for c in payload["candidates"]] == ["CERT", "SNOW"]
+
+
+def _bars_for(symbol: str, n: int = 60, drift: float = 0.004) -> pl.DataFrame:
+    closes, price = [], 100.0
+    for _ in range(n):
+        price *= 1.0 + drift
+        closes.append(price)
+    return pl.DataFrame(
+        {
+            "symbol": [symbol] * n,
+            "date": [dt.date(2026, 5, 1) + dt.timedelta(days=i) for i in range(n)],
+            "open": closes,
+            "high": [c * 1.02 for c in closes],
+            "low": [c * 0.98 for c in closes],
+            "close": closes,
+            "volume": [1_000_000.0] * n,
+            "adjclose": closes,
+        },
+        schema_overrides={"date": pl.Date},
+    )
+
+
+def _with_shape(frame: pl.DataFrame) -> pl.DataFrame:
+    """Add the [EXT] consolidation columns the scan carries but the fixture omits."""
+    n = frame.height
+    return frame.with_columns(
+        pl.Series("tightness_adr_15", [2.1] * n),
+        pl.Series("tightness_adr_40", [4.8] * n),
+        pl.Series("depth_from_high_15", [3.2] * n),
+        pl.Series("depth_from_high_40", [8.1] * n),
+        pl.Series("low_slope_pct_15", [0.12] * n),
+        pl.Series("low_slope_pct_40", [0.08] * n),
+        pl.Series("contraction", [0.78] * n),
+        pl.Series("vol_dryup", [0.62] * n),
+        pl.Series("pivot_high_40", [8.0] * n),
+    )
+
+
+def test_brief_reports_the_consolidation_shape():
+    """These metrics are computed for ranking and used to be discarded before reaching the
+    brief — leaving it unable to say anything about what the base looks like."""
+    text = render_brief(_result(_with_shape(_candidates())), CFG)
+    assert "Base range, in average-days" in text
+    assert "Below the period high" in text
+    assert "Slope of the lows" in text
+    assert "Compression" in text
+    assert "[EXT]" in text
+
+
+def test_brief_includes_a_normalised_price_path():
+    """The one thing a table of scalars cannot convey: a tight base and a straight ramp
+    into the same high look identical in the summary numbers."""
+    result = _result(_with_shape(_candidates(1)))
+    text = render_brief(result, CFG, bars=_bars_for("CERT"))
+
+    assert "Path, last" in text
+    assert "as % of the 40-day high" in text
+    assert "Volume, same sessions" in text
+
+    path_line = next(ln for ln in text.split("\n") if ln.startswith("- Path,"))
+    values = [int(v) for v in path_line.split(":")[1].split()]
+    assert len(values) == CFG.report.brief_path_sessions
+    assert values == sorted(values), "a rising fixture must produce a rising path"
+
+
+def test_brief_without_bars_still_renders():
+    """The path is an enhancement, not a dependency."""
+    text = render_brief(_result(_with_shape(_candidates())), CFG, bars=None)
+    assert "Path, last" not in text
+    assert "CERT" in text
+
+
+def test_brief_points_at_the_charts():
+    text = _flat(render_brief(_result(), CFG))
+    assert "charts/" in text
+    assert "not a substitute" in text
 
 
 def test_write_brief_emits_both_files(tmp_path):

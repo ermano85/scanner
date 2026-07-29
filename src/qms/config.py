@@ -185,6 +185,8 @@ class QualityConfig(_Strict):
 
 
 class ReportConfig(_Strict):
+    brief_path_sessions: int
+    brief_shape_buckets: list[int]
     chart_months: int
     chart_sma: list[int]
     chart_width_px: int

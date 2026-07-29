@@ -45,6 +45,23 @@ Read it as "these charts are worth looking at", not "these are trades".
 - **Trigger tags** say why the name surfaced: `AT_10MA`/`AT_20MA`/`AT_50MA` for price at a
   moving average, `AT_PIVOT` for price near a consolidation high.
 
+## Reading the shape without a picture
+
+Each candidate carries a **Path**: its last closes expressed as a percentage of the recent
+high. This is the closest thing here to seeing the chart, and the differences matter:
+
+- `92 94 96 95 97 96 98 97 98 99` — coiling just under the high. A tight base.
+- `61 68 74 79 85 90 94 97 99 100` — a straight ramp into the high. Extended, not basing.
+- `99 88 74 69 71 78 86 93 98 99` — a deep V back to the high. Not the same setup at all,
+  and the scalar metrics alone would not distinguish it from the first.
+
+**Volume** on the same sessions is given as a multiple of its own longer average. Below 1
+through a base and rising on the push out is the textbook pattern.
+
+**Charts exist and are worth asking for.** Every candidate has a real 6-month daily PNG
+with the 10/20/50 moving averages, in `charts/` beside this file. The path above is a
+useful summary, not a substitute — if a name is worth a decision, look at the chart.
+
 ## Provenance, and what to distrust
 
 - Gates and formulas marked `[DOC]` come from the source material and are treated as
@@ -80,8 +97,12 @@ setup, where the risk sits, what is inconsistent between the numbers and the tag
 which names look like statistical artefacts rather than real setups.
 
 Please do not treat the ranking as a quality ordering — a large part of it is unvalidated
-weighting. And note that no one in this loop can see the actual chart shape, which is the
-thing the whole tool exists to send a human to look at.
+weighting.
+
+A good use of this file is to narrow 40+ names to the handful worth opening a chart on,
+and to say what would confirm or kill each one. The paths above carry real shape
+information, but they are a summary; the PNGs in `charts/` are the actual charts and can
+be attached to this conversation if a name deserves a closer look.
 
 This is a research and triage tool, not a trading system. Nothing in this file is
 financial advice.
@@ -109,6 +130,81 @@ def _money(value) -> str:
     return f"${amount:,.0f}"
 
 
+def _shape_lines(row: dict, history: pl.DataFrame | None, cfg: ScanConfig) -> list[str]:
+    """Describe the *shape* of the base, not just the latest values.
+
+    The chart is the thing this tool exists to send a human to look at, and a table of
+    scalars cannot convey whether price is coiling under a pivot or has just V-recovered
+    into it. Two things close that gap without an image:
+
+    * The `[EXT]` consolidation metrics — range in ADR units, depth from the high, slope
+      of the lows, ATR and volume compression. These are already computed for ranking and
+      were previously discarded before reaching this file.
+    * A normalised path: the last N closes as a percentage of the bucket's pivot high,
+      and volume against its own longer average. A flat run of high-90s is a tight base
+      under resistance; a ramp from the 60s to 100 is an extension. That is legible in a
+      row of integers.
+
+    Everything here is `[EXT]` and labelled as such — it is the implementer's guess at
+    what a base looks like numerically, and it has never been validated against outcomes.
+    """
+    lines: list[str] = []
+    buckets = cfg.report.brief_shape_buckets
+
+    ranges = [
+        f"{b}d {_fmt(row.get(f'tightness_adr_{b}'), 1)}"
+        for b in buckets
+        if row.get(f"tightness_adr_{b}") is not None
+    ]
+    depths = [
+        f"{b}d {_fmt(row.get(f'depth_from_high_{b}'), 1, '%')}"
+        for b in buckets
+        if row.get(f"depth_from_high_{b}") is not None
+    ]
+    slopes = [
+        f"{b}d {_fmt(row.get(f'low_slope_pct_{b}'), 2, '%/session')}"
+        for b in buckets
+        if row.get(f"low_slope_pct_{b}") is not None
+    ]
+
+    if ranges:
+        lines.append(f"- [EXT] Base range, in average-days: {', '.join(ranges)}")
+    if depths:
+        lines.append(f"- [EXT] Below the period high: {', '.join(depths)}")
+    if slopes:
+        lines.append(f"- [EXT] Slope of the lows: {', '.join(slopes)}")
+
+    compression = []
+    if row.get("contraction") is not None:
+        compression.append(f"ATR fast/slow {_fmt(row['contraction'], 2)}")
+    if row.get("vol_dryup") is not None:
+        compression.append(f"volume fast/slow {_fmt(row['vol_dryup'], 2)}")
+    if compression:
+        lines.append(f"- [EXT] Compression (<1 is quieter than usual): {', '.join(compression)}")
+
+    if history is not None and not history.is_empty():
+        sessions = cfg.report.brief_path_sessions
+        recent = history.tail(sessions)
+        pivot = row.get(f"pivot_high_{max(buckets)}")
+
+        if pivot:
+            path = [round(c / pivot * 100) for c in recent["close"].to_list()]
+            lines.append(
+                f"- Path, last {len(path)} closes as % of the {max(buckets)}-day high: "
+                f"{' '.join(str(p) for p in path)}"
+            )
+
+        baseline = history["volume"].tail(cfg.features.consolidation.vol_slow).mean()
+        if baseline:
+            rel = [round(v / baseline, 1) for v in recent["volume"].to_list()]
+            lines.append(
+                f"- Volume, same sessions, as a multiple of its {cfg.features.consolidation.vol_slow}-day average: "
+                f"{' '.join(f'{r:g}' for r in rel)}"
+            )
+
+    return lines
+
+
 def _flags(row: dict) -> list[str]:
     flags = []
     if row.get("extended"):
@@ -122,7 +218,7 @@ def _flags(row: dict) -> list[str]:
     return flags
 
 
-def _candidate_block(row: dict, cfg: ScanConfig) -> str:
+def _candidate_block(row: dict, cfg: ScanConfig, history: pl.DataFrame | None = None) -> str:
     tags = row.get("triggers") or "none"
     earnings = row.get("next_earnings_date")
     if earnings is None:
@@ -155,13 +251,19 @@ def _candidate_block(row: dict, cfg: ScanConfig) -> str:
         f"{_fmt(row.get('preferred_entry_high'))}, max {_fmt(row.get('max_entry'))}",
     ]
 
+    lines.extend(_shape_lines(row, history, cfg))
+
     flags = _flags(row)
     lines.append(f"- Flags: {'; '.join(flags) if flags else 'none'}")
     lines.append("")
     return "\n".join(lines)
 
 
-def render_brief(result: ScanResult, cfg: ScanConfig) -> str:
+def render_brief(
+    result: ScanResult,
+    cfg: ScanConfig,
+    bars: pl.DataFrame | None = None,
+) -> str:
     sizing = cfg.sizing
     risk_dollars = sizing.account * sizing.risk_pct
 
@@ -202,7 +304,11 @@ def render_brief(result: ScanResult, cfg: ScanConfig) -> str:
         return "\n".join(parts)
 
     parts += ["## Candidates", ""]
-    parts += [_candidate_block(row, cfg) for row in result.candidates.iter_rows(named=True)]
+    for row in result.candidates.iter_rows(named=True):
+        history = None
+        if bars is not None and not bars.is_empty():
+            history = bars.filter(pl.col("symbol") == row["symbol"]).sort("date")
+        parts.append(_candidate_block(row, cfg, history))
     parts.append(CLOSING)
     return "\n".join(parts)
 
@@ -255,10 +361,15 @@ def render_brief_json(result: ScanResult, cfg: ScanConfig) -> str:
     return json.dumps(payload, indent=2, default=str)
 
 
-def write_brief(result: ScanResult, cfg: ScanConfig, out_dir: Path) -> Path:
+def write_brief(
+    result: ScanResult,
+    cfg: ScanConfig,
+    out_dir: Path,
+    bars: pl.DataFrame | None = None,
+) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     markdown_path = out_dir / "claude-brief.md"
-    markdown_path.write_text(render_brief(result, cfg), encoding="utf-8")
+    markdown_path.write_text(render_brief(result, cfg, bars), encoding="utf-8")
     (out_dir / "claude-brief.json").write_text(
         render_brief_json(result, cfg), encoding="utf-8"
     )

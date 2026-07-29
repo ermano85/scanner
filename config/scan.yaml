@@ -150,6 +150,12 @@ quality:
   max_unexplained_jump_share: 0.02
 
 report:
+  # Sessions of price/volume path written into the Claude brief. Long enough to show the
+  # shape of a base, short enough that 40+ candidates stay pasteable.
+  brief_path_sessions: 20
+  # Which consolidation buckets the brief reports. Short and long, because a high-tight
+  # flag and a multi-month base are different animals.
+  brief_shape_buckets: [15, 40]
   chart_months: 6
   chart_sma: [10, 20, 50]
   chart_width_px: 1100

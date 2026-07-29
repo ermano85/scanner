@@ -177,7 +177,7 @@ def build_report(
 
     # Both exports are derived from the same ranked frame, so they can never disagree with
     # the HTML about what tonight's list is.
-    write_brief(result, cfg, out_dir)
+    write_brief(result, cfg, out_dir, bars=bars)
     write_watchlist(candidates, result.as_of_date, out_dir)
 
     print(f"[report] {len(rows)} candidate(s) -> {html_path}")
