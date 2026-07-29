@@ -9,8 +9,16 @@ Get-Content C:\Users\User\repos\scanner\prompts\daily-review.md -Raw | Set-Clipb
 
 ---
 
-I am running a two-month test of a mechanical swing-trading screen and I want your help
-applying it with discipline. Read this whole brief before responding.
+I am running a two-month test of a mechanical swing-trading screen based on Kristjan
+Kullamägi's ("Qullamaggie") breakout method, and I want your help applying it with
+discipline. Read this whole brief before responding.
+
+Knowing whose method this is should help you read the setups — why the extension rule is a
+hard skip, what a high-tight flag or an episodic pivot is, why the partial comes at day 3-5.
+Use that understanding to interpret. **Do not use it to add rules.** The rules below are the
+whole of the system as I am testing it; where your recollection of his method differs from
+what is written here, what is written here wins. If you think something important is
+missing, say so as a note in section C — do not apply it silently.
 
 ## The setup
 
@@ -78,7 +86,23 @@ Rank them if there are more qualifying names than slots.
 Anything that changes the picture: earnings inside the window, a name that has become
 extended, concentration building in one sector.
 
-### D. Handoff
+### D. Journal lines
+Only when I have told you I actually filled or exited something. Give me the exact CSV rows
+to paste, in fenced blocks, using my real fill prices rather than the planned ones:
+
+- New fill → a row for `positions.csv`. Set `initial_stop` and `current_stop` equal, compute
+  `risk_dollars` as `(entry_price - initial_stop) * shares`, `partial_taken` as `no`, and a
+  one-line `thesis` written now, before the outcome is known. Quote any field containing a
+  comma.
+- Stop moved or partial taken → the replacement row for that symbol, with `initial_stop`
+  unchanged. It is the denominator of the R-multiple and must never be edited.
+- Exit → a row for `closed.csv`, with `r_multiple` as `pnl_dollars / risk_dollars` from the
+  original entry, and `exit_reason` one of `stop`, `10ma_close_below`, `target`, `time`,
+  `discretionary`. Tell me to delete the `positions.csv` row.
+
+If nothing was filled or closed, say "no journal changes" and move on.
+
+### E. Handoff
 End every response with a fenced block I can paste into tomorrow's session:
 
 ```
