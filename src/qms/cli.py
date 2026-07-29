@@ -145,6 +145,30 @@ def export_tradingview_cmd(
     write_watchlist(result.candidates, result.as_of_date, scan_out_dir(result.as_of_date))
 
 
+@app.command("packet")
+def packet_cmd(
+    as_of: str = typer.Option("", "--as-of", help="Scan date. Default: the newest."),
+    clip: bool = typer.Option(False, "--clip", help="Also copy the packet to the clipboard."),
+) -> None:
+    """Assemble the daily review packet: standing prompt + scan + journal, in one file."""
+    from qms.report.packet import build_packet
+
+    path = build_packet(as_of=_parse_as_of(as_of))
+
+    if clip:
+        import subprocess
+
+        try:
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", f"Get-Content -Raw '{path}' | Set-Clipboard"],
+                check=True,
+                capture_output=True,
+            )
+            print("[packet] copied to clipboard")
+        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+            print(f"[packet] could not copy to clipboard ({exc}); the file is still written")
+
+
 @app.command("publish")
 def publish_cmd(
     as_of: str = typer.Option("", "--as-of", help="Scan date to publish. Default: the newest."),

@@ -99,7 +99,12 @@ scan_a:
 
 sizing:
   # All [DOC]. Spec §5.
-  account: 100000.0
+  #
+  # Live test account, 2026-07-29. At 0.5% that is $50 of risk per trade, and with the
+  # 5-6 concurrent positions the test allows, at most ~3% of the account at risk at once.
+  # Keep this honest: every share count in every report is computed from it, and a stale
+  # value here makes the whole sizing section quietly wrong.
+  account: 10000.0
   # FAQ: 0.3-0.5% typical, rarely above 1%.
   risk_pct: 0.005
   # Doc's share-calculator formula: stop = low_of_day * 0.995

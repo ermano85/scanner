@@ -64,13 +64,16 @@ def test_stop_is_half_a_percent_below_the_low():
 
 
 def test_risk_cap_matches_hand_arithmetic():
-    """account 100,000 x 0.5% = $500 of risk. Stop 97.51 against entry 100 = $2.49/share.
+    """risk dollars = account x risk_pct. Stop 97.51 against entry 100 = $2.49/share.
 
-    500 / 2.49 = 200.8 shares.
+    Derived from the config rather than hardcoded: the account size is a live setting that
+    changes with the operator's balance, and a test asserting a stale absolute would fail
+    for a correct reason and teach nothing.
     """
+    expected_risk = CFG.sizing.account * CFG.sizing.risk_pct
     result = size_one(_inputs(), CFG)
-    assert result["risk_dollars"] == pytest.approx(500.0)
-    assert result["shares_risk"] == pytest.approx(500.0 / 2.49, rel=1e-9)
+    assert result["risk_dollars"] == pytest.approx(expected_risk)
+    assert result["shares_risk"] == pytest.approx(expected_risk / 2.49, rel=1e-9)
 
 
 def test_liquidity_cap_is_one_percent_of_average_volume():
@@ -87,7 +90,8 @@ def test_dollar_volume_cap_keeps_position_under_a_two_hundredth_of_turnover():
 
 def test_concentration_cap_is_twenty_percent_of_account():
     result = size_one(_inputs(entry_price=100.0), CFG)
-    assert result["shares_concentration"] == pytest.approx((0.20 * 100_000.0) / 100.0)
+    expected = (CFG.sizing.max_account_concentration * CFG.sizing.account) / 100.0
+    assert result["shares_concentration"] == pytest.approx(expected)
 
 
 # ------------------------------------------------------------------ which cap binds
@@ -97,7 +101,8 @@ def test_thin_name_is_capped_far_below_the_risk_based_size():
     """The case worth knowing before the open: you cannot trade this at your size."""
     result = size_one(_inputs(avg_vol_20=1_000.0, avg_dollar_vol_20=100_000.0), CFG)
     assert result["shares"] == pytest.approx(5.0)
-    assert result["shares"] < result["shares_risk"] / 10
+    assert result["binding_cap"] in {CAP_DOLLAR_VOL, CAP_LIQUIDITY}
+    assert result["shares"] < result["shares_risk"]
 
 
 @pytest.mark.parametrize(
@@ -146,14 +151,21 @@ def test_concentration_binds_on_a_tight_stop_in_a_liquid_name():
         CFG,
     )
     assert result["binding_cap"] == CAP_CONCENTRATION
-    assert result["shares"] == pytest.approx(200.0)
+    expected = (CFG.sizing.max_account_concentration * CFG.sizing.account) / 100.0
+    assert result["shares"] == pytest.approx(expected)
 
 
 def test_dollar_volume_can_bind_independently_of_share_volume():
-    """A high-priced name can clear the share cap and still fail the turnover cap."""
+    """A high-priced name can clear the share cap and still fail the turnover cap.
+
+    Turnover is scaled to the configured account so this stays meaningful whatever the
+    balance is — on a small account the dollar-volume cap only binds on a genuinely
+    illiquid name.
+    """
+    turnover = CFG.sizing.account * CFG.sizing.max_account_concentration
     result = size_one(
         _inputs(entry_price=1000.0, low_of_day=999.0, avg_vol_20=10_000_000.0,
-                avg_dollar_vol_20=1_000_000.0),
+                avg_dollar_vol_20=turnover),
         CFG,
     )
     assert result["binding_cap"] == CAP_DOLLAR_VOL
