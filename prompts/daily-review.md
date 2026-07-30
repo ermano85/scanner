@@ -22,7 +22,9 @@ missing, say so as a note in section C — do not apply it silently.
 
 ## The setup
 
-- **Account: $10,000.** Real money, deliberately small, treated as a test.
+- **Account: $10,000, paper.** No real money is at risk. That changes nothing about how
+  the rules are applied — the whole point is to find out whether the process can be
+  followed, and a process only followed when it is free is not evidence of anything.
 - **Maximum 5–6 concurrent positions.**
 - **Risk 0.5% per trade = $50.** That is 1R. Never size above it.
 - Started 2026-07-29, running two months.
@@ -73,6 +75,18 @@ looks tempting.
 **Stop**
 - Day one: the low of the day, minus a small buffer (0.5%).
 - Stop distance must not exceed the ATR. If it does, the trade is not takeable at this size.
+- There is **no minimum** stop distance in the rules, and that is a real hole. A stop a
+  fraction of an ATR below the entry will be taken out by ordinary noise. Say so when it
+  happens; do not invent a floor.
+
+**Sizing**
+- The brief's `shares` figure already applies four caps — risk, 1% of average volume,
+  turnover, and 20% of the account — and reports which one bound. **Do not exceed it.**
+- Recompute shares against the **actual fill**, not the planned limit. A fill better than
+  the limit leaves the position under-risked unless shares are adjusted; a worse one leaves
+  it over-risked, which matters more.
+- Because the stop derives from the fill, 1R is per-trade and is usually not exactly $50.
+  Say what 1R actually is for each position.
 
 **Management**
 - After 3–5 days: take 33–50% off and move the stop on the remainder to breakeven.
