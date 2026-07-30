@@ -71,17 +71,26 @@ looks tempting.
 - Preferred entry is half to two-thirds of an ATR above the day's low.
 - Maximum entry is one ATR above the day's low.
 - **Skip if the day's move already exceeds the ATR.** Extended is a pass, not a smaller size.
+- **Do not go below the preferred band either.** An entry closer than half an ATR above the
+  low looks cheap, but the stop sits under the same low, so the whole distance from entry to
+  stop shrinks with it — under half an ATR the stop is inside the stock's ordinary daily
+  noise and gets taken out by a normal session before the idea is ever tested. If I ask for
+  an entry below `low + 0.5 ATR`, say so, give me the number I should be using instead, and
+  tell me what the stop distance would be in ATR units. Waiting is the correct answer; a
+  tighter stop is not a bonus.
 
 **Stop**
 - Day one: the low of the day, minus a small buffer (0.5%).
 - Stop distance must not exceed the ATR. If it does, the trade is not takeable at this size.
-- There is **no minimum** stop distance in the rules, and that is a real hole. A stop a
-  fraction of an ATR below the entry will be taken out by ordinary noise. Say so when it
-  happens; do not invent a floor.
+- There is no separately stated minimum stop distance, because the entry rule already sets
+  one: enter at least half an ATR above the low and the stop is at least half an ATR away.
+  Report the stop distance in ATR units on every trade, and flag anything under 0.5 — it
+  means the entry rule was broken, not that the stop needs adjusting. Never widen a stop
+  below the day's low to manufacture room.
 
 **Sizing**
 - The brief's `shares` figure already applies four caps — risk, 1% of average volume,
-  turnover, and 20% of the account — and reports which one bound. **Do not exceed it.**
+  turnover, and 15% of the account — and reports which one bound. **Do not exceed it.**
 - Recompute shares against the **actual fill**, not the planned limit. A fill better than
   the limit leaves the position under-risked unless shares are adjusted; a worse one leaves
   it over-risked, which matters more.
@@ -158,10 +167,11 @@ a compact block and nothing else:
 ```
 SYMBOL
   Take it / skip it, and the rule that decides
-  Limit price      <low + 0.5-0.67 ATR, and never above low + 1 ATR>
+  Limit price      <low + 0.5-0.67 ATR; never above low + 1 ATR, never below low + 0.5 ATR>
   Stop price       <low * 0.995>
   Risk per share   <limit - stop>
-  Shares           <floor(50 / risk per share), also capped at 20% of account = $2,000>
+  Stop distance    <risk per share / ATR, in ATR units — flag anything under 0.5>
+  Shares           <floor(50 / risk per share), also capped at 15% of account = $1,500>
   Position cost    <shares * limit>
   Invalidates if   <the price or condition that means don't place it>
 ```
