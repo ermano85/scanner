@@ -88,7 +88,7 @@ def test_dollar_volume_cap_keeps_position_under_a_two_hundredth_of_turnover():
     assert result["shares_dollarvol"] * 100.0 * 200 == pytest.approx(500_000_000.0)
 
 
-def test_concentration_cap_is_twenty_percent_of_account():
+def test_concentration_cap_is_the_configured_share_of_the_account():
     result = size_one(_inputs(entry_price=100.0), CFG)
     expected = (CFG.sizing.max_account_concentration * CFG.sizing.account) / 100.0
     assert result["shares_concentration"] == pytest.approx(expected)

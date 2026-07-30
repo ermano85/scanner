@@ -113,8 +113,11 @@ sizing:
   max_pct_of_avg_vol: 0.01
   # Minimum dollar volume = position_size * 200.
   dollar_vol_multiple: 200.0
-  # Never more than 20% of account in one name.
-  max_account_concentration: 0.20
+  # Never more than this share of the account in one name. The doc says 20%; lowered to 15%
+  # on 2026-07-30 because 20% only fits five positions and the test allows six. At $10,000
+  # that is a $1,500 ceiling per name. This is an operator preference overriding a [DOC]
+  # number, so it is written down rather than left to be rediscovered from a share count.
+  max_account_concentration: 0.15
   # Preferred entry is 1/2 to 2/3 of ATR above the low; max entry is low + ATR.
   preferred_entry_atr_low: 0.5
   preferred_entry_atr_high: 0.67
