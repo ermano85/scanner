@@ -19,6 +19,7 @@ from qms import paths
 PROMPT_FILE = paths.REPO_ROOT / "prompts" / "daily-review.md"
 JOURNAL_DIR = paths.REPO_ROOT / "journal"
 POSITIONS_FILE = JOURNAL_DIR / "positions.csv"
+ORDERS_FILE = JOURNAL_DIR / "orders.csv"
 CLOSED_FILE = JOURNAL_DIR / "closed.csv"
 
 # Everything below this marker in the prompt file is the prompt proper; above it is the
@@ -28,6 +29,10 @@ PROMPT_MARKER = "\n---\n"
 # Finished trades carried into the packet. Enough to see how the test is going without
 # pasting two months of history every morning.
 RECENT_CLOSED = 20
+
+# Orders are noisier than trades — several a day, most of them resolved the same session.
+# A shorter tail is enough to show what has been getting placed and what is not filling.
+RECENT_ORDERS = 15
 
 
 def _prompt_body() -> str:
@@ -71,6 +76,8 @@ def build_packet(as_of: dt.date | None = None, out_dir: Path | None = None) -> P
         "# My journal",
         "",
         _csv_block(POSITIONS_FILE, "Open positions"),
+        "",
+        _csv_block(ORDERS_FILE, "Recent orders", limit=RECENT_ORDERS),
         "",
         _csv_block(CLOSED_FILE, "Closed trades", limit=RECENT_CLOSED),
         "",

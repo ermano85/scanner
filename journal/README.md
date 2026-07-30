@@ -1,6 +1,6 @@
 # Trade journal
 
-Two CSVs you maintain by hand. They are the memory of the test — the scanner is stateless
+Three CSVs you maintain by hand. They are the memory of the test — the scanner is stateless
 and has no idea you hold anything.
 
 Keep them accurate even when a trade goes badly. A journal edited to look better than
@@ -21,6 +21,28 @@ reality tells you nothing after two months, which is the entire point of running
 | `thesis` | One line: why you took it. Written *before* the outcome is known |
 
 Delete the row when the position is fully closed, and add it to `closed.csv`.
+
+## `orders.csv` — every order you placed, filled or not
+
+| Column | Meaning |
+|---|---|
+| `date` | `YYYY-MM-DD` you placed it |
+| `symbol` | Ticker |
+| `side` | `buy` or `sell` |
+| `limit_price` | The price you actually entered in the broker |
+| `stop_price` | The stop you intended, if you had set one |
+| `shares` | Quantity ordered |
+| `status` | `filled`, `cancelled`, `expired`, `partial` |
+| `reason` | Why it ended that way — `not_filled`, `changed_mind`, `invalidated`, blank if filled |
+| `note` | Anything worth remembering |
+
+`positions.csv` records what you own. This records what you *tried* to do, which is a
+different and equally interesting question. Over two months it answers things the trade log
+cannot: are your limits too tight to fill, are you chasing above the maximum entry, do you
+cancel names that then run.
+
+The PRGS order on day one is the example. It never filled, so it leaves no trace anywhere
+else — but the limit was above that session's maximum entry, and that is worth knowing.
 
 ## `closed.csv` — every finished trade
 

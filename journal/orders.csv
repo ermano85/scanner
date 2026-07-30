@@ -1,0 +1,3 @@
+date,symbol,side,limit_price,stop_price,shares,status,reason,note
+2026-07-29,MAN,buy,56.30,,,filled,,"brief max_entry 57.10, preferred 55.70-56.18; fill above preferred, inside max"
+2026-07-29,PRGS,buy,41.60,,,cancelled,not_filled,"limit 41.60 was above the brief's max_entry of 40.99 for that session"
