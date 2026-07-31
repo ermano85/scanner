@@ -1,3 +1,6 @@
-date,symbol,side,limit_price,stop_price,shares,status,reason,note
-2026-07-29,MAN,buy,56.65,55.45,41,filled,,"filled at 56.30, better than the 56.65 limit; risk shrank to 0.70R because shares were not recomputed against the actual fill"
-2026-07-29,PRGS,buy,41.60,,,cancelled,not_filled,"limit 41.60 was above that session's max_entry of 40.99; PRGS closed 42.71 and is flagged extended in the 07-30 scan"
+date,symbol,side,order_type,limit_price,stop_price,shares,status,reason,note
+2026-07-29,MAN,buy,limit,56.65,55.45,41,filled,,"filled at 56.30, better than the 56.65 limit; shares not recomputed against the fill, so risk was 0.70R not 1R. 41 shares against a 36-share cap at the time"
+2026-07-29,PRGS,buy,limit,41.60,,,cancelled,not_filled,"limit 41.60 was above that session's max_entry of 40.99; PRGS closed 42.71 and is flagged extended in the 07-30 scan"
+2026-07-29,MAN,sell,stop,,55.45,41,cancelled,discretionary,"day-1 stop cancelled by hand; position left unprotected"
+2026-07-30,CBRL,buy,limit,,56.12,25,filled,,"SHOULD HAVE BEEN A BUY-STOP. A buy limit above the market fills at the quote, so it filled 56.28, which is 0.12 BELOW the 30-min low of 56.40. The planned 57.80 buy-stop trigger was never reached. Limit price as typed: UNRECORDED"
+2026-07-30,CBRL,sell,stop,,56.12,25,filled,,"stopped out at 56.05; 0.07 of slippage, 44% of the 0.16 risk per share"

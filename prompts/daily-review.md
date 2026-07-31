@@ -79,6 +79,15 @@ looks tempting.
   tell me what the stop distance would be in ATR units. Waiting is the correct answer; a
   tighter stop is not a bonus.
 
+**Order types — a price is not an order**
+- An entry level **above the current price is a buy-stop**, not a buy limit. A buy limit
+  placed above the market fills immediately at the quote, which inverts the rule into "buy
+  at whatever it costs right now". Always name the order type alongside the price.
+- The protective stop goes into the broker **at the same time as the entry**, not later.
+- **A stop is never cancelled by hand.** It moves up, to breakeven after the partial and
+  then with the 10-day SMA, and it never moves down or away. A position without a live stop
+  order is not a position in this system, it is an open-ended bet.
+
 **Stop**
 - Day one: the low of the day, minus a small buffer (0.5%).
 - Stop distance must not exceed the ATR. If it does, the trade is not takeable at this size.
@@ -134,8 +143,10 @@ extended, concentration building in one sector, a rule you think the system is m
 Only when I have told you I actually filled, cancelled or exited something. Give me the exact
 CSV rows to paste, in fenced blocks, using my real prices rather than the planned ones:
 
-- Any order I placed, filled or not → a row for `orders.csv`, `status` one of `filled`,
-  `cancelled`, `expired`, `partial`.
+- Any order I placed, filled or not → a row for `orders.csv`. `order_type` is `limit`,
+  `stop`, `stop_limit` or `market` — record what I actually placed, not what the rules
+  wanted, because the difference between those two is worth being able to count later.
+  `status` is one of `filled`, `cancelled`, `expired`, `partial`.
 - New fill → a row for `positions.csv`. Set `initial_stop` and `current_stop` equal, compute
   `risk_dollars` as `(entry_price - initial_stop) * shares`, `partial_taken` as `no`, and a
   one-line `thesis` written now, before the outcome is known. Quote any field containing a
@@ -167,16 +178,21 @@ a compact block and nothing else:
 ```
 SYMBOL
   Take it / skip it, and the rule that decides
-  Limit price      <low + 0.5-0.67 ATR; never above low + 1 ATR, never below low + 0.5 ATR>
+  Order type       <buy-stop if the entry is above the current price, else buy limit>
+  Entry price      <low + 0.5-0.67 ATR; never above low + 1 ATR, never below low + 0.5 ATR>
   Stop price       <low * 0.995>
   Risk per share   <limit - stop>
   Stop distance    <risk per share / ATR, in ATR units — flag anything under 0.5>
   Shares           <floor(50 / risk per share), also capped at 15% of account = $1,500>
-  Position cost    <shares * limit>
+  Position cost    <shares * entry>
+  Protective stop  <the stop order to place at the same time, same broker ticket>
   Invalidates if   <the price or condition that means don't place it>
 ```
 
 Then one line on total exposure across everything I would then hold.
+
+Before anything else in pass 2, check `positions.csv` for a `current_stop` that is not a
+number — that means no stop order is live at the broker, and it is the first thing to raise.
 
 Give me the numbers. This is arithmetic on rules I have specified, applied to prices I have
 given you — not a forecast and not a recommendation to own anything, and I am not asking you

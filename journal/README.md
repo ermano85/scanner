@@ -29,6 +29,7 @@ Delete the row when the position is fully closed, and add it to `closed.csv`.
 | `date` | `YYYY-MM-DD` you placed it |
 | `symbol` | Ticker |
 | `side` | `buy` or `sell` |
+| `order_type` | `limit`, `stop`, `stop_limit`, `market` — **what you actually placed**, not what the rules called for |
 | `limit_price` | The price you actually entered in the broker |
 | `stop_price` | The stop you intended, if you had set one |
 | `shares` | Quantity ordered |
@@ -48,6 +49,7 @@ else — but the limit was above that session's maximum entry, and that is worth
 
 | Column | Meaning |
 |---|---|
+| `risk_dollars` | Copied from `positions.csv` at entry. Stored here so the R-multiple can be checked rather than trusted |
 | `pnl_dollars` | Realised, after any partial |
 | `r_multiple` | `pnl_dollars / risk_dollars`. **The number that matters.** A +2R and a +$180 mean different things on different position sizes; only R is comparable |
 | `exit_reason` | `stop`, `10ma_close_below`, `target`, `time`, `discretionary` |

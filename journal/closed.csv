@@ -1,1 +1,2 @@
-symbol,entry_date,entry_price,exit_date,exit_price,shares,pnl_dollars,r_multiple,exit_reason,lesson
+symbol,entry_date,entry_price,exit_date,exit_price,shares,risk_dollars,pnl_dollars,r_multiple,exit_reason,lesson
+CBRL,2026-07-30,56.28,2026-07-30,56.05,25,4.00,-5.75,-1.44,stop,"placed as a buy limit instead of a buy-stop, so it filled at the quote immediately; the 57.80 trigger was never reached and the correct outcome was no trade"
