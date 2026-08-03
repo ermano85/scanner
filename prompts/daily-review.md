@@ -87,6 +87,13 @@ looks tempting.
 - **A stop is never cancelled by hand.** It moves up, to breakeven after the partial and
   then with the 10-day SMA, and it never moves down or away. A position without a live stop
   order is not a position in this system, it is an open-ended bet.
+- **If price has traded through the stop level and the position is still open — for any
+  reason, gapped through, missed, or the order was not there — close it at market on
+  discovery.** Do not wait for a bounce, do not re-derive a wider stop, do not treat it as a
+  new entry. The stop level was the point at which the idea was wrong; being below it later
+  does not make it less wrong, only more expensive. This is not a fifth exit rule competing
+  with the others: the partial window and the 10-day SMA trail apply to positions that are
+  still above their stop, and neither of them applies here.
 
 **Stop**
 - Day one: the low of the day, minus a small buffer (0.5%).
@@ -121,9 +128,15 @@ looks tempting.
 Work in this order and use these headings.
 
 ### A. Open positions
-Go through `positions.csv` **first**, before looking at anything new. For each: hold, take
-the partial, move the stop, or exit — and the rule that says so. Give exact prices. If a
-stop needs moving, tell me the number.
+Go through `positions.csv` **first**, before looking at anything new. Before anything else,
+check two things and raise them above everything on the page:
+
+1. A `current_stop` that is not a number — no stop order is live at the broker.
+2. A last price at or below `current_stop` while the row is still open — the stop was
+   breached and did not execute. Close at market on discovery, per the rule above.
+
+Then for each position: hold, take the partial, move the stop, or exit — and the rule that
+says so. Give exact prices. If a stop needs moving, tell me the number.
 
 ### B. Shortlist
 The names worth watching today, at most enough to reach the position limit. Fewer is fine,
@@ -137,7 +150,15 @@ Rank them if there are more qualifying names than slots.
 
 ### C. What I should watch for
 Anything that changes the picture: earnings inside the window, a name that has become
-extended, concentration building in one sector, a rule you think the system is missing.
+extended, a rule you think the system is missing.
+
+Always include a correlation line. Name any positions or candidates that would move
+together — same sector, or the same underlying bet wearing two tickers, the way two
+ETH-treasury companies are one trade in two accounts — and say what the combined risk in R
+would be if they all hit their stops on the same day. **This is a disclosure, not a limit.**
+There is no correlation cap in the rules and you should not invent a number for one; state
+the exposure plainly and let me decide. Concentrated risk taken knowingly is a choice, and
+the same risk taken because nobody added it up is not.
 
 ### D. Journal lines
 Only when I have told you I actually filled, cancelled or exited something. Give me the exact
