@@ -104,7 +104,13 @@ sizing:
   # 5-6 concurrent positions the test allows, at most ~3% of the account at risk at once.
   # Keep this honest: every share count in every report is computed from it, and a stale
   # value here makes the whole sizing section quietly wrong.
-  account: 10000.0
+  # Update this after every closed trade. Both passes read it — share counts, the risk
+  # budget and the concentration cap all derive from it — so a stale value here makes every
+  # number in every report quietly wrong rather than loudly broken.
+  #   2026-07-29  10000.00  opened
+  #   2026-07-30   9994.25  CBRL -5.75
+  #   2026-07-31   9776.54  MAN -217.71
+  account: 9776.54
   # FAQ: 0.3-0.5% typical, rarely above 1%.
   risk_pct: 0.005
   # Doc's share-calculator formula: stop = low_of_day * 0.995
@@ -122,6 +128,33 @@ sizing:
   preferred_entry_atr_low: 0.5
   preferred_entry_atr_high: 0.67
   max_entry_atr_multiple: 1.0
+
+pass2:
+  # The intraday packet, assembled ~30 minutes after the open. Everything pass 2 shares
+  # with the nightly scan — account, risk, stop buffer, entry band, concentration — is
+  # read from `sizing` above, deliberately not repeated here. Two homes for the stop
+  # formula is how the two passes start disagreeing about what a stop is.
+  #
+  # [DOC] After 3-5 days take a partial and move the remainder to breakeven. The alert
+  # fires while that window is open and no partial has been recorded.
+  partial_window_days: [3, 5]
+  # [DOC] Never hold through earnings. Trading days, not calendar days. Wider than the
+  # nightly blackout (scan_a.gates.earnings_blackout_days: 3) on purpose: the gate decides
+  # whether a name may be bought at all, while this only raises a flag on something
+  # already held, where the useful thing is more warning rather than less.
+  earnings_soon_days: 5
+  # [DOC] Trail the remainder with the 10-day SMA; exit on the first close below it.
+  trail_sma_period: 10
+  report_sma_periods: [10, 20, 50]
+  # [EXT] A quote whose last trade is older than this is reported as stale rather than
+  # presented as live. Half an hour into the session a liquid name trades continuously,
+  # so silence this long means the feed has stopped, not the tape. Generous because a
+  # false "stale" is a nuisance while a false "live" is a wrong stop.
+  stale_quote_seconds: 900
+  # [EXT] The session low is derived twice — once from the 1-minute bars and once from the
+  # vendor's own day-low field — and the two must agree within this. Wider than a cent and
+  # they are not measuring the same window, which is reported rather than resolved.
+  low_crosscheck_tolerance: 0.01
 
 quality:
   # The gate that stops the scanner running quietly on bad data. Two of the four feeds

@@ -4,3 +4,5 @@ date,symbol,side,order_type,limit_price,stop_price,shares,status,reason,note
 2026-07-29,MAN,sell,stop,,55.45,41,cancelled,discretionary,"day-1 stop cancelled by hand; position left unprotected"
 2026-07-30,CBRL,buy,limit,,56.12,25,filled,,"SHOULD HAVE BEEN A BUY-STOP. A buy limit above the market fills at the quote, so it filled 56.28, which is 0.12 BELOW the 30-min low of 56.40. The planned 57.80 buy-stop trigger was never reached. Limit price as typed: UNRECORDED"
 2026-07-30,CBRL,sell,stop,,56.12,25,filled,,"stopped out at 56.05; 0.07 of slippage, 44% of the 0.16 risk per share"
+2026-07-31,MAN,sell,market,,,41,filled,discretionary,"closed at 50.99, 4.46 below the stop that was cancelled on 07-29; -217.71 = -6.25R"
+2026-07-31,CBRL,buy,stop,,55.99,25,pending,,"buy-stop 57.66 Day TIF, placed ~10:15 EDT with an attached protective sell-stop 25 @ 55.99. Derived from session low 56.27 and ATR 2.7522: risk/share 1.67, stop distance 0.61 ATR, cost 1441.50, 1R 41.75. VOID below 56.27 or above 58.74. If unfilled at the close it expires with the Day TIF — re-derive from the 08-01 scan, do not re-place these numbers. Verify the attached stop is GTC on fill"

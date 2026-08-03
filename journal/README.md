@@ -33,7 +33,7 @@ Delete the row when the position is fully closed, and add it to `closed.csv`.
 | `limit_price` | The price you actually entered in the broker |
 | `stop_price` | The stop you intended, if you had set one |
 | `shares` | Quantity ordered |
-| `status` | `filled`, `cancelled`, `expired`, `partial` |
+| `status` | `pending`, `filled`, `cancelled`, `expired`, `partial` |
 | `reason` | Why it ended that way — `not_filled`, `changed_mind`, `invalidated`, blank if filled |
 | `note` | Anything worth remembering |
 
@@ -44,6 +44,12 @@ cancel names that then run.
 
 The PRGS order on day one is the example. It never filled, so it leaves no trace anywhere
 else — but the limit was above that session's maximum entry, and that is worth knowing.
+
+Write the row when you **place** the order, with `status: pending`, and edit it when the
+order resolves. Waiting until it resolves means a resting order exists only in your memory
+and in a handoff someone has to remember to carry, which is exactly the kind of state this
+file is for. A `pending` row is also the only record of the derivation — the session low and
+ATR that produced the trigger — and those become unrecoverable the moment the day ends.
 
 ## `closed.csv` — every finished trade
 

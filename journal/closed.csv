@@ -1,2 +1,3 @@
 symbol,entry_date,entry_price,exit_date,exit_price,shares,risk_dollars,pnl_dollars,r_multiple,exit_reason,lesson
 CBRL,2026-07-30,56.28,2026-07-30,56.05,25,4.00,-5.75,-1.44,stop,"placed as a buy limit instead of a buy-stop, so it filled at the quote immediately; the 57.80 trigger was never reached and the correct outcome was no trade"
+MAN,2026-07-29,56.30,2026-07-31,50.99,41,34.85,-217.71,-6.25,discretionary,"the stop was cancelled by hand on day 1, so a 1R loss ran to 6.25R; the size was 41 shares against a 36-share cap and the entry was 0.27 ATR above the low, but neither of those cost anything until the stop was gone"
