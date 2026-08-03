@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import datetime as dt
 import functools
+from zoneinfo import ZoneInfo
 
 import exchange_calendars as xcals
 import pandas as pd
 
 CALENDAR_NAME = "XNYS"
+EXCHANGE_TZ = ZoneInfo("America/New_York")
 
 
 @functools.lru_cache(maxsize=1)
@@ -100,6 +102,73 @@ def last_completed_session(now: dt.datetime | None = None) -> dt.date:
     while pd.Timestamp(cal.session_close(_ts(candidate))).to_pydatetime() > moment:
         candidate = previous_session(candidate)
     return candidate
+
+
+# --------------------------------------------------------------------- intraday times
+#
+# Everything above deals in whole sessions, which is all the nightly scan ever needed.
+# Pass 2 runs *during* a session, so it needs the bells themselves. These come from the
+# exchange calendar rather than a hardcoded 09:30/16:00 for one reason: a half-day is not
+# a special case here, it is simply a session whose `session_close` is 13:00. Hardcoding
+# the close would silently mis-state "minutes since open" on exactly the low-liquidity
+# days where an entry is most fragile.
+
+
+REGULAR_CLOSE_ET = dt.time(16, 0)
+
+
+def session_open(day: dt.date) -> dt.datetime:
+    """Opening bell for `day` as a tz-aware UTC datetime. Raises if `day` is not a session."""
+    return pd.Timestamp(_calendar().session_open(_ts(day))).to_pydatetime()
+
+
+def session_close(day: dt.date) -> dt.datetime:
+    """Closing bell for `day` as a tz-aware UTC datetime. Raises if `day` is not a session."""
+    return pd.Timestamp(_calendar().session_close(_ts(day))).to_pydatetime()
+
+
+def is_half_day(day: dt.date) -> bool:
+    """True when `day` is a session that closes early (1pm ET the day after Thanksgiving, etc.)."""
+    if not is_session(day):
+        return False
+    close_et = session_close(day).astimezone(EXCHANGE_TZ).time()
+    return close_et < REGULAR_CLOSE_ET
+
+
+def current_session(now: dt.datetime) -> dt.date | None:
+    """The session in progress at `now`, or None if the market is not open.
+
+    "In progress" means between the bells inclusive of the open and exclusive of the
+    close. The ET date is what selects the candidate session, not the UTC date — after
+    19:00 ET those differ, and using UTC would look up tomorrow's session.
+    """
+    moment = _require_aware(now)
+    day = moment.astimezone(EXCHANGE_TZ).date()
+    if not is_session(day):
+        return None
+    if session_open(day) <= moment < session_close(day):
+        return day
+    return None
+
+
+def minutes_since_open(now: dt.datetime) -> float | None:
+    """Minutes elapsed since the opening bell, or None when no session is in progress."""
+    day = current_session(now)
+    if day is None:
+        return None
+    return (_require_aware(now) - session_open(day)).total_seconds() / 60.0
+
+
+def _require_aware(moment: dt.datetime) -> dt.datetime:
+    """Reject naive datetimes at the boundary.
+
+    A naive datetime here is not a small bug: it would be interpreted as UTC, shifting
+    every session comparison by 3-11 hours depending on the season and the operator's
+    location, and the resulting session low would be wrong without looking wrong.
+    """
+    if moment.tzinfo is None or moment.tzinfo.utcoffset(moment) is None:
+        raise ValueError(f"naive datetime is ambiguous here: {moment!r}; attach a timezone")
+    return moment
 
 
 def shift_sessions(day: dt.date, n: int) -> dt.date:

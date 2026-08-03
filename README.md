@@ -193,6 +193,64 @@ The brief carries its own caveats — what the tool does not do, which numbers a
 that sizing is a pre-open estimate. Caveats left behind in this README are caveats that do not
 travel with the file.
 
+## `pass2` — the intraday packet
+
+The nightly scan is built from the previous close, so it can compute an entry *band* but not
+an entry: it has no session low and no current price. `pass2` supplies those, about thirty
+minutes after the open, and does the arithmetic that follows.
+
+```bash
+uv run pass2 CBRL AMN BLLN
+```
+
+```bash
+uv run pass2 CBRL AMN --positions journal/positions.csv --verbose
+```
+
+```bash
+uv run pass2 CBRL --json
+```
+
+Flags: `--positions FILE`, `--json`, `--at HH:MM` (US Eastern; also truncates the session-low
+window, so it is a real time machine rather than a header change), `--verbose` (prints the
+formula behind every computed value, for reconciling against your own screener), `--no-cache`.
+
+It decides nothing — no ranking, no scoring, no recommendation, no forecast, no broker
+contact. Three properties are worth knowing:
+
+**The session low is regular-hours only, and derived twice.** The 1-minute bars are filtered
+to `meta.tradingPeriods.regular` here, then cross-checked against the vendor's own
+`regularMarketDayLow`. Agreement is reported; disagreement is reported as a `LOW MISMATCH`
+with both numbers and no winner. The excluded pre-market low is printed too, so the filter
+shows its work. This matters because the stop is `session low * 0.995` — a pre-market print
+leaking in produces a stop that is wrong in the dangerous direction and looks reasonable.
+
+**Order type is stated in words.** An entry above the market is a **buy-stop**; a buy *limit*
+above the market fills instantly at the quote instead of resting. `journal/orders.csv` records
+that happening on CBRL on 2026-07-30 for -1.44R. The label is derived only from a price
+confirmed live, and is `UNAVAILABLE` rather than guessed when the quote is stale.
+
+**Provenance is structural, not cosmetic.** Every field is a `Value` that cannot be built
+without saying whether it was fetched, computed, or is unavailable. In the text output column
+zero carries the marker — blank for fetched (with source and timestamp), `=` for computed,
+`!` for unavailable *with the reason*. In `--json` every field is
+`{value, kind, source, as_of}`. There is no code path that emits a bare number, which is what
+makes "never fill a gap with a plausible value" enforceable rather than aspirational.
+
+Earnings are reconciled across Nasdaq's calendar, FMP, and SEC EDGAR 8-K Item 2.02 filings.
+`confirmed` is only ever set by a source that publishes confirmation as a fact — agreement
+between sources is not promoted to it. Disagreement reports **both** dates and picks neither.
+Quarterly cadence is never used to project a date. Set `FMP_API_KEY` in `.env` (see
+`.env.example`) to enable the confirmed feed; without it the tool still runs but can never
+report better than `estimated`, which is the truthful outcome rather than a degraded one.
+
+Sizing, entry multiples, the stop buffer and the concentration cap all come from
+`config/scan.yaml` under `sizing:` — the same block the nightly scan uses — and the share caps
+come from `sizing/calculator.py::size_one` rather than being restated. Verified bit-exact
+against `ranked.csv` for ATR(14), ADR%(20) and the distance-to-MA fields, so pass 1 and pass 2
+cannot drift apart. Daily bars are read from `data/bars/bars.parquet` and never written to it;
+intraday data is never cached, because a cached session low is a wrong stop.
+
 ## Scheduling
 
 Two independent runs, neither waiting on the other. Both are deterministic for a given session,

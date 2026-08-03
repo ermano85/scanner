@@ -194,6 +194,45 @@ class ReportConfig(_Strict):
     chart_dpi: int
 
 
+# -------------------------------------------------------------------------- pass2
+
+
+class Pass2Config(_Strict):
+    """Intraday packet settings. Spec §pass2.
+
+    Only the thresholds pass 2 introduces live here. Everything it shares with the
+    nightly scan — account, risk_pct, stop_buffer, the entry-band multiples, the
+    concentration cap — is read from `sizing`, so the two passes cannot disagree about
+    what a stop is.
+    """
+
+    partial_window_days: list[int]
+    earnings_soon_days: int
+    # The moving average the remainder is trailed against, and whose close-below ends the
+    # trade. A *close* below, never an intraday touch.
+    trail_sma_period: int
+    # The moving averages reported per candidate, with distance in percent and ADR units.
+    report_sma_periods: list[int]
+    # A quote whose last trade is older than this is reported as stale rather than
+    # presented as live. Thirty minutes after the open a liquid name trades constantly;
+    # silence this long means the feed, not the tape.
+    stale_quote_seconds: int
+    # Tolerance for the session-low cross-check between the 1m bars and the vendor's own
+    # day-low field. Wider than a cent and they are not measuring the same thing.
+    low_crosscheck_tolerance: float
+
+    @model_validator(mode="after")
+    def _partial_window_is_a_range(self) -> Pass2Config:
+        if len(self.partial_window_days) != 2:
+            raise ValueError(
+                f"partial_window_days must be [low, high], got {self.partial_window_days}"
+            )
+        low, high = self.partial_window_days
+        if low > high:
+            raise ValueError(f"partial_window_days is reversed: {self.partial_window_days}")
+        return self
+
+
 # ------------------------------------------------------------------------ top level
 
 
@@ -202,6 +241,7 @@ class ScanConfig(_Strict):
     features: FeaturesConfig
     scan_a: ScanAConfig
     sizing: SizingConfig
+    pass2: Pass2Config
     quality: QualityConfig
     report: ReportConfig
 
@@ -228,6 +268,13 @@ class ScanConfig(_Strict):
             raise ValueError(
                 f"triggers.pivot_buckets {sorted(unknown_pivots)} are not computed; "
                 f"consolidation.buckets={self.features.consolidation.buckets}"
+            )
+        pass2_smas = {self.pass2.trail_sma_period, *self.pass2.report_sma_periods}
+        missing_pass2 = pass2_smas - sma
+        if missing_pass2:
+            raise ValueError(
+                f"pass2 references SMA period(s) {sorted(missing_pass2)} that "
+                f"features.sma.periods {sorted(sma)} does not compute"
             )
         return self
 

@@ -9,6 +9,9 @@ data/
 out/
 site/
 
+# API keys for pass 2. `.env.example` documents the variable names and is committed.
+.env
+
 .venv/
 __pycache__/
 *.py[cod]
